@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from mpd import MPDClient, CommandError
+from pydantic import BaseModel
 
 QUICKPLAY_FILE = Path(__file__).parent / "quickplay.json"
 
@@ -96,16 +97,50 @@ def play_album(name: str):
         mpd.play()
     return {"status": "playing", "album": name}
 
-@app.post("/quickplay/{number}")
-def quickplay(number: int):
+class QuickplayEntry(BaseModel):
+    artist: str
+    album: str
+
+@app.get("/quickplay")
+def get_quickplay():
+    logger.info("Getting quickplay list")
     entries = json.loads(QUICKPLAY_FILE.read_text())
-    idx = number - 1
-    if idx < 0 or idx >= len(entries):
-        raise HTTPException(status_code=404, detail=f"No quickplay entry at position {number}")
-    entry = entries[idx]
+    return {"quickplay": entries}
+
+@app.get("/quickplay/{index}")
+def get_quickplay_entry(index: int):
+    logger.info(f"Getting quickplay entry {index}")
+    entries = json.loads(QUICKPLAY_FILE.read_text())
+    if index < 0 or index >= len(entries):
+        raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
+    return {"index": index, **entries[index]}
+
+@app.put("/quickplay")
+def replace_quickplay(body: list[QuickplayEntry]):
+    logger.info(f"Replacing quickplay list ({len(body)} entries)")
+    data = [e.model_dump() for e in body]
+    QUICKPLAY_FILE.write_text(json.dumps(data, indent=2))
+    return {"quickplay": data}
+
+@app.put("/quickplay/{index}")
+def update_quickplay_entry(index: int, body: QuickplayEntry):
+    logger.info(f"Updating quickplay entry {index}: {body.artist} / {body.album}")
+    entries = json.loads(QUICKPLAY_FILE.read_text())
+    if index < 0 or index >= len(entries):
+        raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
+    entries[index] = body.model_dump()
+    QUICKPLAY_FILE.write_text(json.dumps(entries, indent=2))
+    return {"index": index, **entries[index]}
+
+@app.post("/quickplay/{index}")
+def quickplay(index: int):
+    entries = json.loads(QUICKPLAY_FILE.read_text())
+    if index < 0 or index >= len(entries):
+        raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
+    entry = entries[index]
     artist = entry["artist"]
     album = entry["album"]
-    logger.info(f"Quickplay {number}: {artist} / {album}")
+    logger.info(f"Quickplay {index}: {artist} / {album}")
     path = f"Subsonic/Artists/{artist}/{album}"
     with mpd_connection() as mpd:
         try:
