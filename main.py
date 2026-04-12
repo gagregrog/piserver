@@ -57,7 +57,8 @@ def load_playlist(name: str):
 def list_albums():
     logger.info("Listing albums")
     with mpd_connection() as mpd:
-        albums = mpd.list("album")
+        entries = mpd.lsinfo("Subsonic/Albums")
+    albums = [e["directory"].split("/")[-1] for e in entries if "directory" in e]
     return {"albums": albums}
 
 @app.post("/album/{name}")
@@ -65,6 +66,6 @@ def play_album(name: str):
     logger.info(f"Playing album: {name}")
     with mpd_connection() as mpd:
         mpd.clear()
-        mpd.searchadd("album", name)
+        mpd.add(f"Subsonic/Albums/{name}")
         mpd.play()
     return {"status": "playing", "album": name}
