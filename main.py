@@ -52,3 +52,19 @@ def load_playlist(name: str):
         mpd.load(name)
         mpd.play()
     return {"status": "loaded", "playlist": name}
+
+@app.get("/albums")
+def list_albums():
+    logger.info("Listing albums")
+    with mpd_connection() as mpd:
+        albums = mpd.list("album")
+    return {"albums": albums}
+
+@app.post("/album/{name}")
+def play_album(name: str):
+    logger.info(f"Playing album: {name}")
+    with mpd_connection() as mpd:
+        mpd.clear()
+        mpd.searchadd("album", name)
+        mpd.play()
+    return {"status": "playing", "album": name}
