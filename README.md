@@ -32,3 +32,17 @@ Send a post to the available endpoints. For example, to play the queue:
 ```bash
 curl -X POST http://{hostname}.local:8000/play
 ```
+
+### Quick Play
+
+`quickplay.json` contains a list of artist/album targets for the `/quickplay/{number}` endpoint. An example is committed to the repo. To customize it locally without your changes being picked up by git, run:
+
+```bash
+git update-index --skip-worktree quickplay.json
+```
+
+To commit a deliberate update to the example, reverse that first:
+
+```bash
+git update-index --no-skip-worktree quickplay.json
+```

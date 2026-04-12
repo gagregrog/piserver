@@ -1,8 +1,12 @@
+import json
 import logging
 import sys
 from contextlib import contextmanager
-from fastapi import FastAPI
-from mpd import MPDClient
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
+from mpd import MPDClient, CommandError
+
+QUICKPLAY_FILE = Path(__file__).parent / "quickplay.json"
 
 # Logging setup
 def setup_logging():
@@ -69,3 +73,26 @@ def play_album(name: str):
         mpd.add(f"Subsonic/Albums/{name}")
         mpd.play()
     return {"status": "playing", "album": name}
+
+@app.post("/quickplay/{number}")
+def quickplay(number: int):
+    entries = json.loads(QUICKPLAY_FILE.read_text())
+    idx = number - 1
+    if idx < 0 or idx >= len(entries):
+        raise HTTPException(status_code=404, detail=f"No quickplay entry at position {number}")
+    entry = entries[idx]
+    artist = entry["artist"]
+    album = entry["album"]
+    logger.info(f"Quickplay {number}: {artist} / {album}")
+    path = f"Subsonic/Artists/{artist}/{album}"
+    with mpd_connection() as mpd:
+        try:
+            entries = mpd.lsinfo(path)
+        except CommandError:
+            raise HTTPException(status_code=404, detail=f"Album not found: {album}")
+        if not entries:
+            raise HTTPException(status_code=404, detail=f"Album is empty: {album}")
+        mpd.clear()
+        mpd.add(path)
+        mpd.play()
+    return {"status": "playing", "artist": artist, "album": album}
