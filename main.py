@@ -65,6 +65,28 @@ def list_albums():
     albums = [e["directory"].split("/")[-1] for e in entries if "directory" in e]
     return {"albums": albums}
 
+@app.get("/artists")
+def list_artists():
+    logger.info("Listing artists")
+    with mpd_connection() as mpd:
+        entries = mpd.lsinfo("Subsonic/Artists")
+    artists = [e["directory"].split("/")[-1] for e in entries if "directory" in e]
+    return {"artists": artists}
+
+@app.get("/artist/{name}/albums")
+def list_artist_albums(name: str):
+    logger.info(f"Listing albums for artist: {name}")
+    path = f"Subsonic/Artists/{name}"
+    with mpd_connection() as mpd:
+        try:
+            entries = mpd.lsinfo(path)
+        except CommandError:
+            raise HTTPException(status_code=404, detail=f"Artist not found: {name}")
+    albums = [e["directory"].split("/")[-1] for e in entries if "directory" in e]
+    if not albums:
+        raise HTTPException(status_code=404, detail=f"No albums found for artist: {name}")
+    return {"artist": name, "albums": albums}
+
 @app.post("/album/{name}")
 def play_album(name: str):
     logger.info(f"Playing album: {name}")
