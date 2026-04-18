@@ -1,5 +1,6 @@
 import json
 import logging
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -191,3 +192,21 @@ def quickplay(index: int):
     if album:
         result["album"] = album
     return result
+
+
+@router.post("/service/mopidy/restart")
+def restart_mopidy():
+    logger.info("Mopidy restart requested")
+    result = subprocess.run(
+        ["sudo", "systemctl", "restart", "mopidy"],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        if "is not allowed" in result.stderr or "password is required" in result.stderr:
+            raise HTTPException(
+                status_code=401,
+                detail="Permission denied. The pi user needs passwordless sudo for 'systemctl restart mopidy'. See README for setup instructions."
+            )
+        raise HTTPException(status_code=500, detail=result.stderr or "Failed to restart mopidy")
+    logger.info("Mopidy restarted successfully")
+    return {"status": "restarted"}

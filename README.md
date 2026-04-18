@@ -33,6 +33,18 @@ Send a post to the available endpoints. For example, to play the queue:
 curl -X POST http://{hostname}.local:8000/play
 ```
 
+### Restarting Mopidy
+
+The `POST /service/mopidy/restart` endpoint restarts the mopidy service. Because this requires sudo, the `pi` user must be granted passwordless sudo for that specific command.
+
+Run `sudo visudo` on the Pi and add this line at the end of the file:
+
+```
+pi ALL=(ALL) NOPASSWD: /bin/systemctl restart mopidy
+```
+
+Without this, the endpoint returns a `401` error.
+
 ### Quick Play
 
 `quickplay.json` contains a list of artist/album targets for the `/quickplay/{number}` endpoint. An example is committed to the repo. To customize it locally without your changes being picked up by git, run:
