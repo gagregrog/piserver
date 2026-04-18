@@ -88,6 +88,21 @@ def restart_track():
         mpd.seekcur(0)
     return {"status": "restarted"}
 
+@app.get("/current")
+def current_track():
+    logger.info("Current track requested")
+    with mpd_connection() as mpd:
+        status = mpd.status()
+        song = mpd.currentsong()
+    return {"status": status["state"], "track": song}
+
+@app.get("/queue")
+def get_queue():
+    logger.info("Queue requested")
+    with mpd_connection() as mpd:
+        queue = mpd.playlistinfo()
+    return {"queue": queue}
+
 @app.post("/playlist/{name}")
 def load_playlist(name: str):
     logger.info(f"Loading playlist: {name}")
