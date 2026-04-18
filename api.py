@@ -156,13 +156,16 @@ def update_quickplay_entry(index: int, body: QuickplayEntry):
     label = "shuffle all" if body.shuffle else (f"{body.artist}" + (f" / {body.album}" if body.album else ""))
     logger.info(f"Updating quickplay entry {index}: {label}")
     entries = json.loads(QUICKPLAY_FILE.read_text())
-    if index < 0 or index >= len(entries):
+    if index < 0 or index > len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     try:
         player.validate_entry(body.artist, body.album, body.shuffle)
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    entries[index] = body.model_dump()
+    if index == len(entries):
+        entries.append(body.model_dump())
+    else:
+        entries[index] = body.model_dump()
     QUICKPLAY_FILE.write_text(json.dumps(entries, indent=2))
     return {"index": index, **entries[index]}
 
