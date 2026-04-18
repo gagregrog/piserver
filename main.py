@@ -88,14 +88,21 @@ def list_artist_albums(name: str):
         raise HTTPException(status_code=404, detail=f"No albums found for artist: {name}")
     return {"artist": name, "albums": albums}
 
-@app.post("/album/{name}")
-def play_album(name: str):
-    logger.info(f"Playing album: {name}")
+@app.post("/artist/{artist}/album/{album}")
+def play_album(artist: str, album: str):
+    logger.info(f"Playing album: {artist} / {album}")
+    path = f"Subsonic/Artists/{artist}/{album}"
     with mpd_connection() as mpd:
+        try:
+            entries = mpd.lsinfo(path)
+        except CommandError:
+            raise HTTPException(status_code=404, detail=f"Album not found: {album}")
+        if not entries:
+            raise HTTPException(status_code=404, detail=f"Album is empty: {album}")
         mpd.clear()
-        mpd.add(f"Subsonic/Albums/{name}")
+        mpd.add(path)
         mpd.play()
-    return {"status": "playing", "album": name}
+    return {"status": "playing", "artist": artist, "album": album}
 
 class QuickplayEntry(BaseModel):
     artist: str
