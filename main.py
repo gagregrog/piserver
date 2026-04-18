@@ -88,6 +88,22 @@ def list_artist_albums(name: str):
         raise HTTPException(status_code=404, detail=f"No albums found for artist: {name}")
     return {"artist": name, "albums": albums}
 
+@app.post("/artist/{artist}")
+def play_artist(artist: str):
+    logger.info(f"Playing all albums for artist: {artist}")
+    path = f"Subsonic/Artists/{artist}"
+    with mpd_connection() as mpd:
+        try:
+            entries = mpd.lsinfo(path)
+        except CommandError:
+            raise HTTPException(status_code=404, detail=f"Artist not found: {artist}")
+        if not [e for e in entries if "directory" in e]:
+            raise HTTPException(status_code=404, detail=f"No albums found for artist: {artist}")
+        mpd.clear()
+        mpd.add(path)
+        mpd.play()
+    return {"status": "playing", "artist": artist}
+
 @app.post("/artist/{artist}/album/{album}")
 def play_album(artist: str, album: str):
     logger.info(f"Playing album: {artist} / {album}")
@@ -106,16 +122,25 @@ def play_album(artist: str, album: str):
 
 class QuickplayEntry(BaseModel):
     artist: str
-    album: str
+    album: str | None = None
 
-def _validate_album(mpd, artist: str, album: str):
-    path = f"Subsonic/Artists/{artist}/{album}"
-    try:
-        entries = mpd.lsinfo(path)
-    except CommandError:
-        raise HTTPException(status_code=404, detail=f"Album not found: {artist} / {album}")
-    if not entries:
-        raise HTTPException(status_code=404, detail=f"Album is empty: {artist} / {album}")
+def _validate_entry(mpd, artist: str, album: str | None):
+    if album is not None:
+        path = f"Subsonic/Artists/{artist}/{album}"
+        try:
+            entries = mpd.lsinfo(path)
+        except CommandError:
+            raise HTTPException(status_code=404, detail=f"Album not found: {artist} / {album}")
+        if not entries:
+            raise HTTPException(status_code=404, detail=f"Album is empty: {artist} / {album}")
+    else:
+        path = f"Subsonic/Artists/{artist}"
+        try:
+            entries = mpd.lsinfo(path)
+        except CommandError:
+            raise HTTPException(status_code=404, detail=f"Artist not found: {artist}")
+        if not [e for e in entries if "directory" in e]:
+            raise HTTPException(status_code=404, detail=f"No albums found for artist: {artist}")
 
 @app.get("/quickplay")
 def get_quickplay():
@@ -136,7 +161,7 @@ def replace_quickplay(body: list[QuickplayEntry]):
     logger.info(f"Replacing quickplay list ({len(body)} entries)")
     with mpd_connection() as mpd:
         for e in body:
-            _validate_album(mpd, e.artist, e.album)
+            _validate_entry(mpd, e.artist, e.album)
     data = [e.model_dump() for e in body]
     QUICKPLAY_FILE.write_text(json.dumps(data, indent=2))
     return {"quickplay": data}
@@ -148,7 +173,7 @@ def update_quickplay_entry(index: int, body: QuickplayEntry):
     if index < 0 or index >= len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     with mpd_connection() as mpd:
-        _validate_album(mpd, body.artist, body.album)
+        _validate_entry(mpd, body.artist, body.album)
     entries[index] = body.model_dump()
     QUICKPLAY_FILE.write_text(json.dumps(entries, indent=2))
     return {"index": index, **entries[index]}
@@ -160,17 +185,15 @@ def quickplay(index: int):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     entry = entries[index]
     artist = entry["artist"]
-    album = entry["album"]
-    logger.info(f"Quickplay {index}: {artist} / {album}")
-    path = f"Subsonic/Artists/{artist}/{album}"
+    album = entry.get("album")
+    logger.info(f"Quickplay {index}: {artist}" + (f" / {album}" if album else " (all albums)"))
+    path = f"Subsonic/Artists/{artist}/{album}" if album else f"Subsonic/Artists/{artist}"
     with mpd_connection() as mpd:
-        try:
-            entries = mpd.lsinfo(path)
-        except CommandError:
-            raise HTTPException(status_code=404, detail=f"Album not found: {album}")
-        if not entries:
-            raise HTTPException(status_code=404, detail=f"Album is empty: {album}")
+        _validate_entry(mpd, artist, album)
         mpd.clear()
         mpd.add(path)
         mpd.play()
-    return {"status": "playing", "artist": artist, "album": album}
+    result = {"status": "playing", "artist": artist}
+    if album:
+        result["album"] = album
+    return result
