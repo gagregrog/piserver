@@ -37,10 +37,18 @@ def mpd_connection():
 
 @app.post("/play")
 def play():
-    logger.info("Play command received")
+    logger.info("Play/pause command received")
     with mpd_connection() as mpd:
-        mpd.play()
-    return {"status": "playing"}
+        state = mpd.status()["state"]
+        if state == "play":
+            mpd.pause(1)
+            return {"status": "paused"}
+        elif state == "pause":
+            mpd.pause(0)
+            return {"status": "playing"}
+        else:
+            mpd.play()
+            return {"status": "playing"}
 
 @app.post("/stop")
 def stop():
