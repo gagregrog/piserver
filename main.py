@@ -50,6 +50,16 @@ def play():
             mpd.play()
             return {"status": "playing"}
 
+@app.post("/shuffle")
+def shuffle_all():
+    logger.info("Shuffling all tracks")
+    with mpd_connection() as mpd:
+        mpd.clear()
+        mpd.add("Subsonic/Albums")
+        mpd.shuffle()
+        mpd.play()
+    return {"status": "playing", "shuffle": True}
+
 @app.post("/stop")
 def stop():
     logger.info("Stop command received")
@@ -129,10 +139,13 @@ def play_album(artist: str, album: str):
     return {"status": "playing", "artist": artist, "album": album}
 
 class QuickplayEntry(BaseModel):
-    artist: str
+    artist: str | None = None
     album: str | None = None
+    shuffle: bool = False
 
-def _validate_entry(mpd, artist: str, album: str | None):
+def _validate_entry(mpd, artist: str | None, album: str | None, shuffle: bool = False):
+    if shuffle:
+        return
     if album is not None:
         path = f"Subsonic/Artists/{artist}/{album}"
         try:
@@ -169,19 +182,20 @@ def replace_quickplay(body: list[QuickplayEntry]):
     logger.info(f"Replacing quickplay list ({len(body)} entries)")
     with mpd_connection() as mpd:
         for e in body:
-            _validate_entry(mpd, e.artist, e.album)
+            _validate_entry(mpd, e.artist, e.album, e.shuffle)
     data = [e.model_dump() for e in body]
     QUICKPLAY_FILE.write_text(json.dumps(data, indent=2))
     return {"quickplay": data}
 
 @app.put("/quickplay/{index}")
 def update_quickplay_entry(index: int, body: QuickplayEntry):
-    logger.info(f"Updating quickplay entry {index}: {body.artist} / {body.album}")
+    label = "shuffle all" if body.shuffle else (f"{body.artist}" + (f" / {body.album}" if body.album else ""))
+    logger.info(f"Updating quickplay entry {index}: {label}")
     entries = json.loads(QUICKPLAY_FILE.read_text())
     if index < 0 or index >= len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     with mpd_connection() as mpd:
-        _validate_entry(mpd, body.artist, body.album)
+        _validate_entry(mpd, body.artist, body.album, body.shuffle)
     entries[index] = body.model_dump()
     QUICKPLAY_FILE.write_text(json.dumps(entries, indent=2))
     return {"index": index, **entries[index]}
@@ -192,8 +206,17 @@ def quickplay(index: int):
     if index < 0 or index >= len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     entry = entries[index]
-    artist = entry["artist"]
+    artist = entry.get("artist")
     album = entry.get("album")
+    shuffle = entry.get("shuffle", False)
+    if shuffle:
+        logger.info(f"Quickplay {index}: shuffle all")
+        with mpd_connection() as mpd:
+            mpd.clear()
+            mpd.add("Subsonic/Albums")
+            mpd.shuffle()
+            mpd.play()
+        return {"status": "playing", "shuffle": True}
     logger.info(f"Quickplay {index}: {artist}" + (f" / {album}" if album else " (all albums)"))
     path = f"Subsonic/Artists/{artist}/{album}" if album else f"Subsonic/Artists/{artist}"
     with mpd_connection() as mpd:
