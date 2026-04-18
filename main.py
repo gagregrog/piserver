@@ -67,6 +67,27 @@ def stop():
         mpd.stop()
     return {"status": "stopped"}
 
+@app.post("/next")
+def next_track():
+    logger.info("Next track command received")
+    with mpd_connection() as mpd:
+        mpd.next()
+    return {"status": "next"}
+
+@app.post("/previous")
+def previous_track():
+    logger.info("Previous track command received")
+    with mpd_connection() as mpd:
+        mpd.previous()
+    return {"status": "previous"}
+
+@app.post("/restart")
+def restart_track():
+    logger.info("Restart track command received")
+    with mpd_connection() as mpd:
+        mpd.seekcur(0)
+    return {"status": "restarted"}
+
 @app.post("/playlist/{name}")
 def load_playlist(name: str):
     logger.info(f"Loading playlist: {name}")
