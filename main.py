@@ -108,6 +108,15 @@ class QuickplayEntry(BaseModel):
     artist: str
     album: str
 
+def _validate_album(mpd, artist: str, album: str):
+    path = f"Subsonic/Artists/{artist}/{album}"
+    try:
+        entries = mpd.lsinfo(path)
+    except CommandError:
+        raise HTTPException(status_code=404, detail=f"Album not found: {artist} / {album}")
+    if not entries:
+        raise HTTPException(status_code=404, detail=f"Album is empty: {artist} / {album}")
+
 @app.get("/quickplay")
 def get_quickplay():
     logger.info("Getting quickplay list")
@@ -125,6 +134,9 @@ def get_quickplay_entry(index: int):
 @app.put("/quickplay")
 def replace_quickplay(body: list[QuickplayEntry]):
     logger.info(f"Replacing quickplay list ({len(body)} entries)")
+    with mpd_connection() as mpd:
+        for e in body:
+            _validate_album(mpd, e.artist, e.album)
     data = [e.model_dump() for e in body]
     QUICKPLAY_FILE.write_text(json.dumps(data, indent=2))
     return {"quickplay": data}
@@ -135,6 +147,8 @@ def update_quickplay_entry(index: int, body: QuickplayEntry):
     entries = json.loads(QUICKPLAY_FILE.read_text())
     if index < 0 or index >= len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
+    with mpd_connection() as mpd:
+        _validate_album(mpd, body.artist, body.album)
     entries[index] = body.model_dump()
     QUICKPLAY_FILE.write_text(json.dumps(entries, indent=2))
     return {"index": index, **entries[index]}
