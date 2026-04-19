@@ -1,18 +1,15 @@
 {
   "input": {
-    "protocol": "SONY12",
-    "scancode": "0x812",
+    "sirc": { "address": "0x10", "command": "0x12" },
     "repeat": 3,
     "switch_delay_s": 0.5
   },
   "volume_up": {
-    "protocol": "SONY12",
-    "scancode": "0x000",
+    "sirc": { "address": "0x10", "command": "0x00" },
     "repeat": 3
   },
   "volume_down": {
-    "protocol": "SONY12",
-    "scancode": "0x000",
+    "sirc": { "address": "0x10", "command": "0x00" },
     "repeat": 3
   }
 }

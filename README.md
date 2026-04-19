@@ -156,7 +156,7 @@ Reboot. After rebooting, `/dev/lirc1` should appear alongside `/dev/lirc0`.
 #### Capturing a Command
 
 ```bash
-sudo ir-keytable -p sony -t
+make read-sony
 ```
 
 Point your Sony remote at the receiver and press the button you want to capture. You will see output like:
