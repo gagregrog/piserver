@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import play_service
 import player
 
 QUICKPLAY_FILE = Path(__file__).parent / "quickplay.json"
@@ -24,13 +25,13 @@ class QuickplayEntry(BaseModel):
 @router.post("/play")
 def play():
     logger.info("Play/pause command received")
-    return {"status": player.toggle_play()}
+    return {"status": play_service.toggle_play()}
 
 
 @router.post("/shuffle")
 def shuffle_all():
     logger.info("Shuffling all tracks")
-    player.shuffle_all()
+    play_service.shuffle_all()
     return {"status": "playing", "shuffle": True}
 
 
@@ -77,7 +78,7 @@ def get_queue():
 @router.post("/playlist/{name}")
 def load_playlist(name: str):
     logger.info(f"Loading playlist: {name}")
-    player.load_playlist(name)
+    play_service.load_playlist(name)
     return {"status": "loaded", "playlist": name}
 
 
@@ -106,7 +107,7 @@ def list_artist_albums(name: str):
 def play_artist(artist: str):
     logger.info(f"Playing all albums for artist: {artist}")
     try:
-        player.play_artist(artist)
+        play_service.play_artist(artist)
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "playing", "artist": artist}
@@ -116,7 +117,7 @@ def play_artist(artist: str):
 def play_album(artist: str, album: str):
     logger.info(f"Playing album: {artist} / {album}")
     try:
-        player.play_album(artist, album)
+        play_service.play_album(artist, album)
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "playing", "artist": artist, "album": album}
@@ -181,14 +182,14 @@ def quickplay(index: int):
     shuffle = entry.get("shuffle", False)
     if shuffle:
         logger.info(f"Quickplay {index}: shuffle all")
-        player.shuffle_all()
+        play_service.shuffle_all()
         return {"status": "playing", "shuffle": True}
     logger.info(f"Quickplay {index}: {artist}" + (f" / {album}" if album else " (all albums)"))
     try:
         if album:
-            player.play_album(artist, album)
+            play_service.play_album(artist, album)
         else:
-            player.play_artist(artist)
+            play_service.play_artist(artist)
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     result = {"status": "playing", "artist": artist}

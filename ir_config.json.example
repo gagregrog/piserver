@@ -1,0 +1,18 @@
+{
+  "input": {
+    "protocol": "SONY12",
+    "scancode": "0x812",
+    "repeat": 3,
+    "switch_delay_s": 0.5
+  },
+  "volume_up": {
+    "protocol": "SONY12",
+    "scancode": "0x000",
+    "repeat": 3
+  },
+  "volume_down": {
+    "protocol": "SONY12",
+    "scancode": "0x000",
+    "repeat": 3
+  }
+}
