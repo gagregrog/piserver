@@ -3,7 +3,7 @@ VENV     = /home/pi/piserver/venv
 PIP      = $(VENV)/bin/pip
 SYSTEMD  = /etc/systemd/system/$(SERVICE).service
 
-.PHONY: setup deps update start stop restart status logs
+.PHONY: setup deps update start stop restart status logs read-sony
 
 ## First-time setup: create venv, install deps, register and start service
 setup: $(VENV) $(SYSTEMD) deps
@@ -45,3 +45,7 @@ status:
 
 logs:
 	sudo journalctl -u $(SERVICE) -f
+
+## Decode a Sony remote button — point remote at the IR receiver and press a button
+read-sony:
+	sudo ir-keytable -p sony -t
