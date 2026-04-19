@@ -49,9 +49,9 @@ Without this, the endpoint returns a `401` error.
 
 When a play command is received the server sends an IR signal to switch the Sony stereo to the correct input before starting playback.
 
-### Hardware
+### IR LED Transmitter
 
-**Parts:**
+#### Parts
 
 - Adafruit Super-bright 5mm IR LED (ADA388, 940 nm) [chain two together for better signal]
 - 2N2222A NPN transistor
@@ -61,7 +61,7 @@ When a play command is received the server sends an IR signal to switch the Sony
 
 **Why GPIO 12?** The Waveshare audio HAT uses I2S, which occupies GPIO 18 (BCLK) — the usual hardware PWM0 pin. GPIO 12 is the alternate hardware PWM0 mapping and is free.
 
-### Wiring
+#### Wiring
 
 ```
 5V  (Pin  2) ──[33Ω]──[ADA388 anode→cathode]──┐
@@ -80,7 +80,7 @@ With the flat part of the transistor facing you, the pinout is EBC (eat big cook
 
 ![pi pinout](./images/pi-pinout.png)
 
-### System Configuration
+#### System Configuration
 
 **1. Enable the kernel IR transmitter overlay.**
 
@@ -112,8 +112,6 @@ After rebooting, `/dev/lirc0` should appear.
 
 **2. Grant the `pi` user access to the LIRC device.**
 
-Create a udev rule:
-
 ```bash
 echo 'SUBSYSTEM=="lirc", MODE="0660", GROUP="pi"' | sudo tee /etc/udev/rules.d/99-lirc.rules
 sudo udevadm control --reload-rules && sudo udevadm trigger
@@ -125,68 +123,98 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 sudo apt install -y ir-keytable
 ```
 
-### Discovering Your Sony SIRC Scancode
+### IR Receiver (optional — for discovering command codes)
 
-You need the scancode for the input button on your specific Sony stereo. The easiest way is to decode your existing remote:
+A TSOP38238 wired to the Pi lets you decode your existing Sony remote using `ir-keytable`. This is only needed if you don't have a Flipper Zero and want to read codes directly on the Pi.
 
-1. Wire a TSOP38238 or similar IR receiver to the Pi (data pin → any GPIO, e.g. GPIO 23).
-2. Enable the receiver overlay temporarily and run:
-   ```bash
-   sudo ir-keytable -p sony -t
-   ```
-3. Press the **input select** button on your Sony remote and read the reported scancode from the output, e.g. `SONY12:0x015`.
+#### Parts
 
-Alternatively, search the LIRC remote database for your model:  
-`https://lirc.sourceforge.net/remotes/sony/`
+- TSOP38238, VS1838B, or any 38 kHz demodulating IR receiver (3 pins: Out, GND, Vs)
 
-### Configuring the Scancode
+#### Wiring
 
-Copy the example config and fill in your values:
+TSOP38238 pinout: flat side facing you, leads pointing down — Out / GND / Vs left to right.
 
-```bash
-cp ir_config.json.example ir_config.json
+```
+5V   (Pin  2) ─────────────────── Vs  (pin 3)
+                               [TSOP38238]
+GND  (Pin 34) ─────────────────── GND (pin 2)
+GPIO 23 (Pin 16) ──────────────── Out (pin 1)
 ```
 
-`ir_config.json` is gitignored so it stays local to each device.
+#### System Configuration
+
+Add the receiver overlay alongside the transmitter line in `config.txt`:
+
+```ini
+dtoverlay=gpio-ir-tx,gpio_pin=12
+dtoverlay=gpio-ir,gpio_pin=23
+```
+
+Reboot. After rebooting, `/dev/lirc1` should appear alongside `/dev/lirc0`.
+
+#### Capturing a Command
+
+```bash
+sudo ir-keytable -p sony -t
+```
+
+Point your Sony remote at the receiver and press the button you want to capture. You will see output like:
+
+```
+173.728070: lirc protocol(sony12): scancode = 0x100025
+```
+
+The kernel encodes Sony scancodes as `(address << 16) | command`:
+- `address = 0x100025 >> 16 = 0x10`
+- `command = 0x100025 & 0xFF = 0x25`
+
+### Discovering Your Sony SIRC Command
+
+You need the **address** and **command** values for the button on your Sony stereo.
+
+- **A / address** — identifies the device type (e.g. amplifier, TV). Only the device with a matching address responds.
+- **C / command** — the action to perform (input select, volume up, etc.).
+
+**Option A — Flipper Zero:** point your Sony remote at the Flipper and capture the button press. It will report something like `SIRC A: 0x10 C: 0x12`.
+
+**Option B — IR receiver on the Pi:** follow the IR Receiver setup above and use `ir-keytable` to capture the scancode, then decode it as shown.
+
+### Configuring the IR Command
+
+Create `ir_config.json` in the repo root (it is gitignored and stays local to each device):
 
 ```json
 {
   "input": {
-    "protocol": "SONY12",
-    "scancode": "0x812",
+    "sirc": { "address": "0x10", "command": "0x12" },
+    "repeat": 3,
     "switch_delay_s": 0.5
-  },
-  "volume_up": {
-    "protocol": "SONY12",
-    "scancode": "0x000"
   }
 }
 ```
 
-Each key is a named command. Per-command fields:
+Address and command values can be hex strings (`"0x10"`) or decimal integers (`16`).
 
-- **`protocol`** — IR protocol, e.g. `SONY12`, `NEC`, `RC5`. Defaults to `SONY12` if omitted.
-- **`scancode`** — hex scancode for the button. See discovery steps above.
-- **`repeat`** — number of times to send the frame. SIRC (Sony) requires `3`; most other protocols require `1`. Defaults to `1` if omitted.
-- **`switch_delay_s`** — seconds to wait after sending the command. Useful for `input` to give the stereo time to switch. Omit or set to `0` for no delay.
+Per-command fields:
 
-The `input` key is what the server sends before starting playback. All other keys are available for future endpoints via `ir_blaster.send_command("key")`.
+- **`sirc`** — object with `address` and `command` for the SIRC-12 frame.
+- **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.
+- **`switch_delay_s`** — seconds to wait after sending. Useful for `input` to give the stereo time to switch. Omit or set to `0` for no delay.
+
+The `input` key is what the server sends before starting playback. All other keys are available for future use via `ir_blaster.send_command("key")`.
 
 If `ir_config.json` does not exist, or a requested key is absent, IR blasting is silently skipped and playback continues normally.
 
-### Testing from the Command Line
+### Testing
 
-Before relying on the server, verify the circuit works. Substitute the scancode from your `ir_config.json`:
+With `ir_config.json` in place, trigger the command through the API:
 
 ```bash
-# Send the input-select command 3 times (SIRC requirement)
-for i in 1 2 3; do
-    ir-ctl -d /dev/lirc0 --scancode SONY12:0x812
-    sleep 0.05
-done
+curl -X POST http://{hostname}.local:8000/play
 ```
 
-The stereo should switch inputs.
+The server logs will show `ir_blaster: sent sony12 A:0x10 C:0x12 x3`. If you have a Flipper Zero, point it at the LED while triggering to verify the transmitted address and command match what your remote sends.
 
 ### Quick Play
 
