@@ -125,7 +125,7 @@ sudo apt install -y ir-keytable
 
 ### IR Receiver (optional — for discovering command codes)
 
-A TSOP38238 wired to the Pi lets you decode your existing Sony remote using `ir-keytable`. This is only needed if you don't have a Flipper Zero and want to read codes directly on the Pi.
+A TSOP38238 wired to the Pi lets you decode your existing Sony remote. This is only needed if you don't have a Flipper Zero and want to read codes directly on the Pi.
 
 #### Parts
 
@@ -139,7 +139,7 @@ TSOP38238 pinout: flat side facing you, leads pointing down — Out / GND / Vs l
 5V   (Pin  2) ─────────────────── Vs  (pin 3)
                                [TSOP38238]
 GND  (Pin 34) ─────────────────── GND (pin 2)
-GPIO 23 (Pin 16) ──────────────── Out (pin 1)
+GPIO 24 (Pin 16) ──────────────── Out (pin 1)
 ```
 
 #### System Configuration
@@ -148,12 +148,14 @@ Add the receiver overlay alongside the transmitter line in `config.txt`:
 
 ```ini
 dtoverlay=gpio-ir-tx,gpio_pin=12
-dtoverlay=gpio-ir,gpio_pin=23
+dtoverlay=gpio-ir,gpio_pin=24
 ```
 
 Reboot. After rebooting, `/dev/lirc1` should appear alongside `/dev/lirc0`.
 
 #### Capturing a Command
+
+> **Always use `make read-sony` rather than running `ir-keytable` directly.** The make target finds the correct RC device automatically and restores the default IR protocol on exit. Running `ir-keytable -p sony` manually and then rebooting without restoring the protocol will cause the WM8960 audio HAT to stop working.
 
 ```bash
 make read-sony
@@ -166,6 +168,7 @@ Point your Sony remote at the receiver and press the button you want to capture.
 ```
 
 The kernel encodes Sony scancodes as `(address << 16) | command`:
+
 - `address = 0x100025 >> 16 = 0x10`
 - `command = 0x100025 & 0xFF = 0x25`
 
