@@ -3,7 +3,7 @@ VENV     = /home/pi/piserver/venv
 PIP      = $(VENV)/bin/pip
 SYSTEMD  = /etc/systemd/system/$(SERVICE).service
 
-.PHONY: setup deps update start stop restart status logs read-sony repair
+.PHONY: setup deps update start stop restart status logs
 
 ## First-time setup: create venv, install deps, register and start service
 setup: $(VENV) $(SYSTEMD) deps
@@ -46,14 +46,3 @@ status:
 logs:
 	sudo journalctl -u $(SERVICE) -f
 
-## Decode a Sony remote button — point remote at the IR receiver and press a button
-read-sony:
-	bash scripts/read-sony.sh
-
-## Repair the WM8960 audio HAT when it disappears from aplay -l
-repair:
-	@echo "This will reinstall the WM8960 DKMS module and reboot."
-	@printf "Continue? [y/N] " && read ans && [ "$$ans" = y ] || exit 0
-	sudo dkms remove wm8960-soundcard/1.0 --all
-	cd /home/pi/WM8960-Audio-HAT && sudo ./install.sh
-	sudo reboot

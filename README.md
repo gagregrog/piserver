@@ -153,25 +153,6 @@ dtoverlay=gpio-ir,gpio_pin=24
 
 Reboot. After rebooting, `/dev/lirc1` should appear alongside `/dev/lirc0`.
 
-#### Capturing a Command
-
-> **Always use `make read-sony` rather than running `ir-keytable` directly.** The make target finds the correct RC device automatically and restores the default IR protocol on exit. Running `ir-keytable -p sony` manually and then rebooting without restoring the protocol will cause the WM8960 audio HAT to stop working.
-
-```bash
-make read-sony
-```
-
-Point your Sony remote at the receiver and press the button you want to capture. You will see output like:
-
-```
-173.728070: lirc protocol(sony12): scancode = 0x100025
-```
-
-The kernel encodes Sony scancodes as `(address << 16) | command`:
-
-- `address = 0x100025 >> 16 = 0x10`
-- `command = 0x100025 & 0xFF = 0x25`
-
 ### Discovering Your Sony SIRC Command
 
 You need the **address** and **command** values for the button on your Sony stereo.
@@ -179,9 +160,7 @@ You need the **address** and **command** values for the button on your Sony ster
 - **A / address** — identifies the device type (e.g. amplifier, TV). Only the device with a matching address responds.
 - **C / command** — the action to perform (input select, volume up, etc.).
 
-**Option A — Flipper Zero:** point your Sony remote at the Flipper and capture the button press. It will report something like `SIRC A: 0x10 C: 0x12`.
-
-**Option B — IR receiver on the Pi:** follow the IR Receiver setup above and use `ir-keytable` to capture the scancode, then decode it as shown.
+Use a Flipper Zero: point your Sony remote at it and capture the button press. It will report something like `SIRC A: 0x10 C: 0x12`.
 
 ### Configuring the IR Command
 
