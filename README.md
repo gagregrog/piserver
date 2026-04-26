@@ -180,7 +180,7 @@ Address and command values can be hex strings (`"0x10"`) or decimal integers (`1
 
 Per-command fields:
 
-- **`sirc`** — object with `address` and `command` for the SIRC-12 frame.
+- **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).
 - **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.
 - **`switch_delay_s`** — seconds to wait after sending. Useful for `input` to give the stereo time to switch. Omit or set to `0` for no delay.
 

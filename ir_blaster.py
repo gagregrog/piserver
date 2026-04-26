@@ -33,6 +33,15 @@ def _read_sirc(sirc: dict) -> tuple[int, int]:
     return _coerce(sirc["address"], "address"), _coerce(sirc["command"], "command")
 
 
+def _sirc_protocol(address: int) -> str:
+    """Select the correct Sony SIRC variant based on address width."""
+    if address <= 0x1F:
+        return "sony12"
+    if address <= 0xFF:
+        return "sony15"
+    raise ValueError(f"address 0x{address:x} exceeds 8-bit SIRC-15 range")
+
+
 def send_command(key: str) -> None:
     """Send the named IR command from ir_config.json.
 
@@ -63,12 +72,18 @@ def send_command(key: str) -> None:
         logger.warning("ir_blaster: %s", e)
         return
 
+    try:
+        protocol = _sirc_protocol(address)
+    except ValueError as e:
+        logger.warning("ir_blaster: %s", e)
+        return
+
     # The kernel encodes Sony scancodes as (address << 16) | command
     scancode = (address << 16) | command
 
     for i in range(repeat):
         result = subprocess.run(
-            ["ir-ctl", "-d", LIRC_DEVICE, "--scancode", f"sony12:{scancode:#x}"],
+            ["ir-ctl", "-d", LIRC_DEVICE, "--scancode", f"{protocol}:{scancode:#x}"],
             capture_output=True,
             text=True,
         )
@@ -79,8 +94,8 @@ def send_command(key: str) -> None:
             time.sleep(0.045)
 
     logger.info(
-        "ir_blaster: sent sony12 A:0x%02x C:0x%02x x%d (key=%r)",
-        address, command, repeat, key,
+        "ir_blaster: sent %s A:0x%02x C:0x%02x x%d (key=%r)",
+        protocol, address, command, repeat, key,
     )
 
     if delay:
