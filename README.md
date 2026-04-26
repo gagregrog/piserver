@@ -33,40 +33,6 @@ Send a post to the available endpoints. For example, to play the queue:
 curl -X POST http://{hostname}.local:8000/play
 ```
 
-### Real-time Events (SSE)
-
-`GET /events` streams player state changes as a [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) stream. The server uses MPD's `idle` command internally, so events are pushed the moment a change occurs — no polling needed.
-
-An initial event is sent immediately on connect with the current state, so the client doesn't have to wait for the next song change.
-
-Each event is a JSON object:
-
-```json
-{
-  "status": "play",
-  "track": {
-    "title": "Some Song",
-    "artist": "Some Artist",
-    "album": "Some Album",
-    "file": "Subsonic/Artists/...",
-    "duration": "241.0"
-  }
-}
-```
-
-`status` is one of `"play"`, `"pause"`, or `"stop"`.
-
-Consuming the stream from a browser:
-
-```js
-const events = new EventSource('http://arrow.local:8000/events');
-events.onmessage = (e) => {
-    const { status, track } = JSON.parse(e.data);
-};
-```
-
-CORS is open (`allow_origins: *`), so a web UI served from a different origin (e.g. the ESP32) can connect without restriction.
-
 ### Restarting Mopidy
 
 The `POST /service/mopidy/restart` endpoint restarts the mopidy service. Because this requires sudo, the `pi` user must be granted passwordless sudo for that specific command.
