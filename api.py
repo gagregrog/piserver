@@ -1,9 +1,12 @@
+import asyncio
 import json
 import logging
 import subprocess
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from mpd import MPDClient
 from pydantic import BaseModel
 
 import play_service
@@ -67,6 +70,43 @@ def restart_track():
 def current_track():
     logger.info("Current track requested")
     return player.current_track()
+
+
+@router.get("/events")
+async def events(request: Request):
+    async def generator():
+        loop = asyncio.get_event_loop()
+
+        try:
+            yield f"data: {json.dumps(player.current_track())}\n\n"
+        except Exception as e:
+            logger.warning(f"SSE: failed to send initial state: {e}")
+
+        while True:
+            if await request.is_disconnected():
+                break
+            mpd = MPDClient()
+            try:
+                mpd.connect("localhost", 6600)
+                while True:
+                    if await request.is_disconnected():
+                        return
+                    await loop.run_in_executor(None, mpd.idle, "player")
+                    yield f"data: {json.dumps(player.current_track())}\n\n"
+            except Exception as e:
+                logger.warning(f"SSE: MPD connection error: {e}")
+                await asyncio.sleep(2)
+            finally:
+                try:
+                    mpd.disconnect()
+                except Exception:
+                    pass
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/queue")
