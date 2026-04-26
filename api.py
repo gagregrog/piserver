@@ -1,15 +1,12 @@
-import json
 import logging
 import subprocess
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import config
 import play_service
 import player
-
-QUICKPLAY_FILE = Path(__file__).parent / "quickplay.json"
 
 logger = logging.getLogger(__name__)
 
@@ -126,14 +123,14 @@ def play_album(artist: str, album: str):
 @router.get("/quickplay")
 def get_quickplay():
     logger.info("Getting quickplay list")
-    entries = json.loads(QUICKPLAY_FILE.read_text())
+    entries = config.load().get("quickplay", [])
     return {"quickplay": entries}
 
 
 @router.get("/quickplay/{index}")
 def get_quickplay_entry(index: int):
     logger.info(f"Getting quickplay entry {index}")
-    entries = json.loads(QUICKPLAY_FILE.read_text())
+    entries = config.load().get("quickplay", [])
     if index < 0 or index >= len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     return {"index": index, **entries[index]}
@@ -148,7 +145,9 @@ def replace_quickplay(body: list[QuickplayEntry]):
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     data = [e.model_dump() for e in body]
-    QUICKPLAY_FILE.write_text(json.dumps(data, indent=2))
+    cfg = config.load()
+    cfg["quickplay"] = data
+    config.save(cfg)
     return {"quickplay": data}
 
 
@@ -156,7 +155,8 @@ def replace_quickplay(body: list[QuickplayEntry]):
 def update_quickplay_entry(index: int, body: QuickplayEntry):
     label = "shuffle all" if body.shuffle else (f"{body.artist}" + (f" / {body.album}" if body.album else ""))
     logger.info(f"Updating quickplay entry {index}: {label}")
-    entries = json.loads(QUICKPLAY_FILE.read_text())
+    cfg = config.load()
+    entries = cfg.get("quickplay", [])
     if index < 0 or index > len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     try:
@@ -167,13 +167,14 @@ def update_quickplay_entry(index: int, body: QuickplayEntry):
         entries.append(body.model_dump())
     else:
         entries[index] = body.model_dump()
-    QUICKPLAY_FILE.write_text(json.dumps(entries, indent=2))
+    cfg["quickplay"] = entries
+    config.save(cfg)
     return {"index": index, **entries[index]}
 
 
 @router.post("/quickplay/{index}")
 def quickplay(index: int):
-    entries = json.loads(QUICKPLAY_FILE.read_text())
+    entries = config.load().get("quickplay", [])
     if index < 0 or index >= len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     entry = entries[index]

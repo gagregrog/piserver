@@ -3,7 +3,7 @@ VENV     = /home/pi/piserver/venv
 PIP      = $(VENV)/bin/pip
 SYSTEMD  = /etc/systemd/system/$(SERVICE).service
 
-.PHONY: setup deps update start stop restart status logs
+.PHONY: setup deps update start stop restart status logs activate ldr
 
 ## First-time setup: create venv, install deps, register and start service
 setup: $(VENV) $(SYSTEMD) deps
@@ -45,4 +45,8 @@ status:
 
 logs:
 	sudo journalctl -u $(SERVICE) -f
+
+## Run the LDR sensor monitor script
+ldr:
+	$(VENV)/bin/python3 scripts/sense_stereo.py
 

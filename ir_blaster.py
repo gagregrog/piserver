@@ -1,23 +1,14 @@
-import json
 import logging
 import subprocess
 import time
 from pathlib import Path
 
+import config
+import stereo_sensor
+
 logger = logging.getLogger(__name__)
 
 LIRC_DEVICE = "/dev/lirc0"
-CONFIG_FILE = Path(__file__).parent / "ir_config.json"
-
-
-def _load_config() -> dict | None:
-    if not CONFIG_FILE.exists():
-        return None
-    try:
-        return json.loads(CONFIG_FILE.read_text())
-    except Exception as e:
-        logger.warning("ir_blaster: could not read config: %s", e)
-        return None
 
 
 def _read_sirc(sirc: dict) -> tuple[int, int]:
@@ -43,16 +34,16 @@ def _sirc_protocol(address: int) -> str:
 
 
 def send_command(key: str) -> None:
-    """Send the named IR command from ir_config.json.
+    """Send the named IR command from the ir section of piserver.json.
 
     Silently skips if the config file is absent or the key is not present.
     Config entries use a 'sirc' dict, e.g.:
         {"input": {"sirc": {"address": "0x10", "command": "0x12"}, "repeat": 3}}
     """
-    config = _load_config()
-    if config is None:
+    ir_config = config.load().get("ir")
+    if not ir_config:
         return
-    cmd = config.get(key)
+    cmd = ir_config.get(key)
     if not cmd or not cmd.get("sirc"):
         return
 
@@ -102,5 +93,20 @@ def send_command(key: str) -> None:
         time.sleep(delay)
 
 
+def power_on_stereo() -> None:
+    """Send the power-on IR command if the sensor indicates the stereo is off.
+
+    Silently skips if use_sensor is not enabled in piserver.json, or if the
+    sensor is unavailable. The 'power' IR command is also silently skipped if
+    absent from config.
+    """
+    if not config.load().get("use_sensor"):
+        return
+    if stereo_sensor.is_on() is False:
+        logger.info("ir_blaster: stereo is off — sending power command")
+        send_command("power")
+
+
 def select_stereo_input() -> None:
+    power_on_stereo()
     send_command("input")

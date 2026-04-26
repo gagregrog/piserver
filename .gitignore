@@ -10,4 +10,4 @@ build/
 .venv/
 venv/
 piserver.log
-ir_config.json
+piserver.json

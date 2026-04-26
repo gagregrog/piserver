@@ -19,6 +19,7 @@ make start    # start the service
 make stop     # stop the service
 make status   # show service status
 make logs     # tail service logs
+make ldr      # start the ldr script for tuning photoresistor
 ```
 
 ## Usage
@@ -44,6 +45,44 @@ pi ALL=(ALL) NOPASSWD: /bin/systemctl restart mopidy
 ```
 
 Without this, the endpoint returns a `401` error.
+
+## Configuration
+
+All device-local configuration lives in `piserver.json` in the repo root. This file is gitignored and never committed — each device has its own copy. Use `piserver.example.json` as a starting point:
+
+```bash
+cp piserver.example.json piserver.json
+```
+
+The full schema:
+
+```json
+{
+  "use_sensor": false,
+  "quickplay": [
+    { "artist": "Artist Name", "album": "Album Name" },
+    { "artist": "Another Artist" }
+  ],
+  "ir": {
+    "power": {
+      "sirc": { "address": "0x10", "command": "0x2E" },
+      "repeat": 3,
+      "switch_delay_s": 3.0
+    },
+    "input": {
+      "sirc": { "address": "0x10", "command": "0x12" },
+      "repeat": 3,
+      "switch_delay_s": 0.5
+    }
+  }
+}
+```
+
+All sections are optional. If `piserver.json` is absent or a section is missing, that feature is silently disabled and playback continues normally.
+
+- **`use_sensor`** — set to `true` to enable the photoresistor power sensor (see below). When enabled, the server checks whether the stereo is on before sending the `input` command, and powers it on first if needed. Defaults to `false`.
+- **`quickplay`** — list of artist/album targets for the `/quickplay/{index}` endpoints. Each entry has `artist`, optionally `album`, and optionally `shuffle: true` for shuffle-all.
+- **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. See the IR Blaster section below for field details.
 
 ## IR Blaster (Sony Stereo Input Control)
 
@@ -123,6 +162,74 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 sudo apt install -y ir-keytable
 ```
 
+### Discovering Your Sony SIRC Command
+
+You need the **address** and **command** values for each button on your Sony stereo.
+
+- **A / address** — identifies the device type (e.g. amplifier, TV). Only the device with a matching address responds.
+- **C / command** — the action to perform (input select, volume up, etc.).
+
+Use a Flipper Zero: point your Sony remote at it and capture the button press. It will report something like `SIRC A: 0x10 C: 0x12`.
+
+### IR Command Configuration
+
+IR commands live under the `"ir"` key in `piserver.json`. Address and command values can be hex strings (`"0x10"`) or decimal integers (`16`).
+
+Per-command fields:
+
+- **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).
+- **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.
+- **`switch_delay_s`** — seconds to wait after sending. Useful for `input` to give the stereo time to switch, or for `power` to wait for the stereo to finish booting. Omit or set to `0` for no delay.
+
+The `input` key is what the server sends before starting playback. The `power` key is sent first when the sensor detects the stereo is off (see below).
+
+### Testing
+
+With `piserver.json` configured, trigger the command through the API:
+
+```bash
+curl -X POST http://{hostname}.local:8000/play
+```
+
+The server logs will show `ir_blaster: sent sony12 A:0x10 C:0x12 x3`. If you have a Flipper Zero, point it at the LED while triggering to verify the transmitted address and command match what your remote sends.
+
+### Photoresistor Power Sensor (optional — auto power-on)
+
+When `use_sensor: true` is set in `piserver.json`, the server reads a photoresistor wired to GPIO 17 before sending the input-select command. When the stereo is off (no LED light detected), it first sends the `"power"` IR command and waits for the stereo to boot, then sends `"input"`.
+
+#### Parts
+
+- LDR (photoresistor, any common 5mm type)
+- 10 kΩ resistor (or a potentiometer for initial tuning — see below)
+
+**Why GPIO 17?** GPIO 18–21 are claimed by the Waveshare audio HAT (I2S), GPIO 12 is IR TX, GPIO 24 is IR RX, and GPIO 2/3 are I2C. GPIO 17 is free.
+
+#### Wiring
+
+Point the LDR at the power LED on the stereo.
+
+```
+3.3V (Pin  1) ──[LDR]──┬── GPIO 17 (Pin 11)
+                      [10kΩ]
+                        │
+               GND (Pin  9) ──┘
+```
+
+- **Stereo on (LED lit):** LDR resistance drops → voltage at GPIO rises → reads HIGH
+- **Stereo off (dark):** LDR resistance rises → 10 kΩ pulls low → reads LOW
+
+#### Tuning the resistor
+
+The 10 kΩ value is a starting point. Depending on how bright the stereo's LED is and how closely you can aim the LDR, you may need to adjust it. Use a potentiometer in place of the fixed resistor while tuning, then replace it with the nearest fixed resistor value once the reading is stable.
+
+To monitor the sensor reading in real time while adjusting:
+
+```bash
+python3 scripts/sense_stereo.py
+```
+
+This prints `ON` or `OFF` (with a timestamp) each time the reading changes. Aim for the GPIO voltage to be clearly above ~2 V when the LED is lit and clearly below ~1.3 V when dark.
+
 ### IR Receiver (optional — for discovering command codes)
 
 A TSOP38238 wired to the Pi lets you decode your existing Sony remote. This is only needed if you don't have a Flipper Zero and want to read codes directly on the Pi.
@@ -153,61 +260,19 @@ dtoverlay=gpio-ir,gpio_pin=24
 
 Reboot. After rebooting, `/dev/lirc1` should appear alongside `/dev/lirc0`.
 
-### Discovering Your Sony SIRC Command
-
-You need the **address** and **command** values for the button on your Sony stereo.
-
-- **A / address** — identifies the device type (e.g. amplifier, TV). Only the device with a matching address responds.
-- **C / command** — the action to perform (input select, volume up, etc.).
-
-Use a Flipper Zero: point your Sony remote at it and capture the button press. It will report something like `SIRC A: 0x10 C: 0x12`.
-
-### Configuring the IR Command
-
-Create `ir_config.json` in the repo root (it is gitignored and stays local to each device):
-
-```json
-{
-  "input": {
-    "sirc": { "address": "0x10", "command": "0x12" },
-    "repeat": 3,
-    "switch_delay_s": 0.5
-  }
-}
-```
-
-Address and command values can be hex strings (`"0x10"`) or decimal integers (`16`).
-
-Per-command fields:
-
-- **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).
-- **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.
-- **`switch_delay_s`** — seconds to wait after sending. Useful for `input` to give the stereo time to switch. Omit or set to `0` for no delay.
-
-The `input` key is what the server sends before starting playback. All other keys are available for future use via `ir_blaster.send_command("key")`.
-
-If `ir_config.json` does not exist, or a requested key is absent, IR blasting is silently skipped and playback continues normally.
-
-### Testing
-
-With `ir_config.json` in place, trigger the command through the API:
-
-```bash
-curl -X POST http://{hostname}.local:8000/play
-```
-
-The server logs will show `ir_blaster: sent sony12 A:0x10 C:0x12 x3`. If you have a Flipper Zero, point it at the LED while triggering to verify the transmitted address and command match what your remote sends.
-
 ### Quick Play
 
-`quickplay.json` contains a list of artist/album targets for the `/quickplay/{number}` endpoint. An example is committed to the repo. To customize it locally without your changes being picked up by git, run:
+The `quickplay` section of `piserver.json` defines a numbered list of artist/album targets for the `/quickplay/{index}` endpoints. Each entry supports:
 
-```bash
-git update-index --skip-worktree quickplay.json
+```json
+{"artist": "Artist Name", "album": "Album Name"}  // play a specific album
+{"artist": "Artist Name"}                          // play all albums by artist
+{"shuffle": true}                                  // shuffle everything
 ```
 
-To commit a deliberate update to the example, reverse that first:
+The list can also be managed via the API:
 
-```bash
-git update-index --no-skip-worktree quickplay.json
-```
+- `GET /quickplay` — return the full list
+- `PUT /quickplay` — replace the full list
+- `PUT /quickplay/{index}` — update or append a single entry
+- `POST /quickplay/{index}` — trigger playback for that entry
