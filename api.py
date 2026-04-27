@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import config
+import ir_blaster
 import play_service
 import player
 
@@ -118,6 +119,22 @@ def play_album(artist: str, album: str):
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"status": "playing", "artist": artist, "album": album}
+
+
+@router.get("/ir")
+def list_ir_functions():
+    functions = list(config.load().get("ir", {}).keys())
+    return {"functions": functions}
+
+
+@router.post("/ir/{function}")
+def send_ir(function: str):
+    ir_config = config.load().get("ir", {})
+    if function not in ir_config:
+        raise HTTPException(status_code=404, detail=f"IR function {function!r} not found")
+    logger.info(f"IR command: {function}")
+    ir_blaster.send_command(function)
+    return {"sent": function}
 
 
 @router.get("/quickplay")
