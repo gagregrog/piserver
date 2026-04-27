@@ -34,16 +34,11 @@ def _sirc_protocol(address: int) -> str:
 
 
 def send_command(key: str) -> None:
-    """Send the named IR command from the ir section of piserver.json.
-
-    Silently skips if the config file is absent or the key is not present.
-    Config entries use a 'sirc' dict, e.g.:
-        {"input": {"sirc": {"address": "0x10", "command": "0x12"}, "repeat": 3}}
-    """
+    """Send the named IR command from the ir section of piserver.json."""
     ir_config = config.load().get("ir")
     if not ir_config:
         return
-    cmd = ir_config.get(key)
+    cmd = next((item for item in ir_config if item.get("name") == key), None)
     if not cmd or not cmd.get("sirc"):
         return
 
@@ -55,7 +50,7 @@ def send_command(key: str) -> None:
         return
 
     repeat = cmd.get("repeat", 1)
-    delay = cmd.get("switch_delay_s", 0)
+    delay = cmd.get("delay", 0)
 
     try:
         address, command = _read_sirc(cmd["sirc"])
@@ -109,4 +104,7 @@ def power_on_stereo() -> None:
 
 def select_stereo_input() -> None:
     power_on_stereo()
-    send_command("input")
+    ir_config = config.load().get("ir", [])
+    item = next((item for item in ir_config if item.get("default")), None)
+    if item:
+        send_command(item["name"])

@@ -123,14 +123,14 @@ def play_album(artist: str, album: str):
 
 @router.get("/ir")
 def list_ir_functions():
-    functions = list(config.load().get("ir", {}).keys())
-    return {"functions": functions}
+    ir_config = config.load().get("ir", [])
+    return [{"name": item.get("name", ""), "class": item.get("class", "")} for item in ir_config]
 
 
 @router.post("/ir/{function}")
 def send_ir(function: str):
-    ir_config = config.load().get("ir", {})
-    if function not in ir_config:
+    ir_config = config.load().get("ir", [])
+    if not any(item.get("name") == function for item in ir_config):
         raise HTTPException(status_code=404, detail=f"IR function {function!r} not found")
     logger.info(f"IR command: {function}")
     ir_blaster.send_command(function)

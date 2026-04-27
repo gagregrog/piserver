@@ -63,18 +63,23 @@ The full schema:
     { "artist": "Artist Name", "album": "Album Name" },
     { "artist": "Another Artist" }
   ],
-  "ir": {
-    "power": {
+  "ir": [
+    {
+      "name": "power",
+      "class": "system",
       "sirc": { "address": "0x10", "command": "0x2E" },
       "repeat": 3,
-      "switch_delay_s": 3.0
+      "delay": 3.0
     },
-    "input": {
+    {
+      "name": "input",
+      "class": "stereo",
+      "default": true,
       "sirc": { "address": "0x10", "command": "0x12" },
       "repeat": 3,
-      "switch_delay_s": 0.5
+      "delay": 0.5
     }
-  }
+  ]
 }
 ```
 
@@ -82,7 +87,7 @@ All sections are optional. If `piserver.json` is absent or a section is missing,
 
 - **`use_sensor`** — set to `true` to enable the photoresistor power sensor (see below). When enabled, the server checks whether the stereo is on before sending the `input` command, and powers it on first if needed. Defaults to `false`.
 - **`quickplay`** — list of artist/album targets for the `/quickplay/{index}` endpoints. Each entry has `artist`, optionally `album`, and optionally `shuffle: true` for shuffle-all.
-- **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. See the IR Blaster section below for field details.
+- **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. Each entry supports two optional metadata fields in addition to the hardware fields: `class` (a display group name shown in the web UI) and `default: true` (marks the input-select command sent before playback begins). See the IR Blaster section below for field details.
 
 ## IR Blaster (Sony Stereo Input Control)
 
@@ -173,15 +178,18 @@ Use a Flipper Zero: point your Sony remote at it and capture the button press. I
 
 ### IR Command Configuration
 
-IR commands live under the `"ir"` key in `piserver.json`. Address and command values can be hex strings (`"0x10"`) or decimal integers (`16`).
+`"ir"` in `piserver.json` is an array of command objects. Address and command values can be hex strings (`"0x10"`) or decimal integers (`16`).
 
 Per-command fields:
 
+- **`name`** — unique identifier for this command, used in the `POST /ir/{name}` API.
+- **`class`** — display group shown in the web UI (e.g. `"system"`, `"input"`).
+- **`default`** — set to `true` on the command the server sends before starting playback (input-select). Only one entry should have this.
 - **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).
 - **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.
-- **`switch_delay_s`** — seconds to wait after sending. Useful for `input` to give the stereo time to switch, or for `power` to wait for the stereo to finish booting. Omit or set to `0` for no delay.
+- **`delay`** — seconds to wait after sending. Useful for the input command (stereo input switch time) or power command (stereo boot time). Omit or set to `0` for no delay.
 
-The `input` key is what the server sends before starting playback. The `power` key is sent first when the sensor detects the stereo is off (see below).
+The entry with `"name": "power"` is sent first when the sensor detects the stereo is off (see below).
 
 ### Testing
 

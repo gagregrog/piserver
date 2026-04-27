@@ -1,18 +1,21 @@
 {
   "use_sensor": false,
-  "quickplay": [
-    {"artist": "Example Artist", "album": "Example Album"}
-  ],
-  "ir": {
-    "power": {
-      "sirc": {"address": "0x10", "command": "0x00"},
+  "quickplay": [{ "artist": "Example Artist", "album": "Example Album" }],
+  "ir": [
+    {
+      "name": "power",
+      "class": "system",
+      "sirc": { "address": "0x10", "command": "0x00" },
       "repeat": 3,
-      "switch_delay_s": 3.0
+      "delay": 3.0
     },
-    "input": {
-      "sirc": {"address": "0x10", "command": "0x00"},
+    {
+      "name": "audio",
+      "class": "input",
+      "default": true,
+      "sirc": { "address": "0x10", "command": "0x00" },
       "repeat": 3,
-      "switch_delay_s": 0.5
+      "delay": 0.5
     }
-  }
+  ]
 }
