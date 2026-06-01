@@ -12,7 +12,7 @@ setup: $(VENV) $(SYSTEMD) deps
 	sudo systemctl start $(SERVICE)
 
 $(VENV):
-	sudo apt install -y python3-full python3-pip ir-keytable swig
+	sudo apt install -y python3-full python3-pip ir-keytable swig liblgpio-dev
 	python3 -m venv $(VENV)
 
 $(SYSTEMD): $(SERVICE).service
