@@ -33,8 +33,14 @@ def _sirc_protocol(address: int) -> str:
     raise ValueError(f"address 0x{address:x} exceeds 8-bit SIRC-15 range")
 
 
-def send_command(key: str) -> None:
-    """Send the named IR command from the ir section of piserver.json."""
+def send_command(key: str, count: int = 1) -> None:
+    """Send the named IR command from the ir section of piserver.json.
+
+    count is the number of discrete presses to send (e.g. 3 volume increments).
+    Each press is a full SIRC burst (the command's configured `repeat` frames)
+    followed by the command's `delay`, so the receiver registers them as
+    separate presses rather than one held button.
+    """
     ir_config = config.load().get("ir")
     if not ir_config:
         return
@@ -67,25 +73,27 @@ def send_command(key: str) -> None:
     # The kernel encodes Sony scancodes as (address << 16) | command
     scancode = (address << 16) | command
 
-    for i in range(repeat):
-        result = subprocess.run(
-            ["ir-ctl", "-d", LIRC_DEVICE, "--scancode", f"{protocol}:{scancode:#x}"],
-            capture_output=True,
-            text=True,
+    for press in range(max(count, 1)):
+        for i in range(repeat):
+            result = subprocess.run(
+                ["ir-ctl", "-d", LIRC_DEVICE, "--scancode", f"{protocol}:{scancode:#x}"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                logger.warning("ir_blaster: send failed: %s", result.stderr.strip())
+                return
+            if i < repeat - 1:
+                time.sleep(0.045)
+
+        logger.info(
+            "ir_blaster: sent %s A:0x%02x C:0x%02x x%d (key=%r)",
+            protocol, address, command, repeat, key,
         )
-        if result.returncode != 0:
-            logger.warning("ir_blaster: send failed: %s", result.stderr.strip())
-            return
-        if i < repeat - 1:
-            time.sleep(0.045)
 
-    logger.info(
-        "ir_blaster: sent %s A:0x%02x C:0x%02x x%d (key=%r)",
-        protocol, address, command, repeat, key,
-    )
-
-    if delay:
-        time.sleep(delay)
+        # Gap between presses so each burst registers separately.
+        if delay:
+            time.sleep(delay)
 
 
 def power_on_stereo() -> None:

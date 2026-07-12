@@ -182,7 +182,7 @@ Use a Flipper Zero: point your Sony remote at it and capture the button press. I
 
 Per-command fields:
 
-- **`name`** — unique identifier for this command, used in the `POST /ir/{name}` API.
+- **`name`** — unique identifier for this command, used in the `POST /ir/{name}` API. The endpoint accepts an optional `count` query param (e.g. `POST /ir/volumeUp?count=3`) to send the command as that many discrete presses in a single request — each press is a full `repeat`-frame burst separated by `delay`. Defaults to `1`.
 - **`class`** — display group shown in the web UI (e.g. `"system"`, `"input"`).
 - **`default`** — set to `true` on the command the server sends before starting playback (input-select). Only one entry should have this.
 - **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).

@@ -128,13 +128,15 @@ def list_ir_functions():
 
 
 @router.post("/ir/{function}")
-def send_ir(function: str):
+def send_ir(function: str, count: int = 1):
     ir_config = config.load().get("ir", [])
     if not any(item.get("name") == function for item in ir_config):
         raise HTTPException(status_code=404, detail=f"IR function {function!r} not found")
-    logger.info(f"IR command: {function}")
-    ir_blaster.send_command(function)
-    return {"sent": function}
+    if count < 1:
+        count = 1
+    logger.info(f"IR command: {function} x{count}")
+    ir_blaster.send_command(function, count=count)
+    return {"sent": function, "count": count}
 
 
 @router.get("/quickplay")
@@ -191,29 +193,13 @@ def update_quickplay_entry(index: int, body: QuickplayEntry):
 
 @router.post("/quickplay/{index}")
 def quickplay(index: int):
-    entries = config.load().get("quickplay", [])
-    if index < 0 or index >= len(entries):
-        raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
-    entry = entries[index]
-    artist = entry.get("artist")
-    album = entry.get("album")
-    shuffle = entry.get("shuffle", False)
-    if shuffle:
-        logger.info(f"Quickplay {index}: shuffle all")
-        play_service.shuffle_all()
-        return {"status": "playing", "shuffle": True}
-    logger.info(f"Quickplay {index}: {artist}" + (f" / {album}" if album else " (all albums)"))
+    logger.info(f"Quickplay {index}")
     try:
-        if album:
-            play_service.play_album(artist, album)
-        else:
-            play_service.play_artist(artist)
+        return play_service.play_quickplay(index)
+    except IndexError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    result = {"status": "playing", "artist": artist}
-    if album:
-        result["album"] = album
-    return result
 
 
 @router.post("/service/mopidy/restart")
