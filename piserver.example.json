@@ -1,6 +1,14 @@
 {
   "use_sensor": false,
-  "quickplay": [{ "artist": "Example Artist", "album": "Example Album" }],
+  "quickplay": [
+    {
+      "items": [
+        { "artist": "Example Artist", "album": "Example Album" },
+        { "artist": "Another Artist", "album": null }
+      ]
+    },
+    { "shuffle": true }
+  ],
   "ir": [
     {
       "name": "power",

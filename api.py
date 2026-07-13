@@ -14,10 +14,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-class QuickplayEntry(BaseModel):
+class QuickplayItem(BaseModel):
     artist: str | None = None
     album: str | None = None
+
+
+class QuickplayEntry(BaseModel):
+    # A shuffle-all entry (whole library, randomized) OR a sequential list of
+    # items. When shuffle is true, items is ignored.
     shuffle: bool = False
+    items: list[QuickplayItem] = []
+
+
+def _item_label(item: QuickplayItem) -> str:
+    return f"{item.artist}" + (f" / {item.album}" if item.album else "")
+
+
+def _entry_label(entry: QuickplayEntry) -> str:
+    if entry.shuffle:
+        return "shuffle all"
+    if not entry.items:
+        return "(empty)"
+    return ", ".join(_item_label(i) for i in entry.items)
 
 
 @router.post("/play")
@@ -159,8 +177,11 @@ def get_quickplay_entry(index: int):
 def replace_quickplay(body: list[QuickplayEntry]):
     logger.info(f"Replacing quickplay list ({len(body)} entries)")
     try:
-        for e in body:
-            player.validate_entry(e.artist, e.album, e.shuffle)
+        for entry in body:
+            if entry.shuffle:
+                continue
+            for item in entry.items:
+                player.validate_entry(item.artist, item.album)
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     data = [e.model_dump() for e in body]
@@ -172,14 +193,15 @@ def replace_quickplay(body: list[QuickplayEntry]):
 
 @router.put("/quickplay/{index}")
 def update_quickplay_entry(index: int, body: QuickplayEntry):
-    label = "shuffle all" if body.shuffle else (f"{body.artist}" + (f" / {body.album}" if body.album else ""))
-    logger.info(f"Updating quickplay entry {index}: {label}")
+    logger.info(f"Updating quickplay entry {index}: {_entry_label(body)}")
     cfg = config.load()
     entries = cfg.get("quickplay", [])
     if index < 0 or index > len(entries):
         raise HTTPException(status_code=404, detail=f"No quickplay entry at index {index}")
     try:
-        player.validate_entry(body.artist, body.album, body.shuffle)
+        if not body.shuffle:
+            for item in body.items:
+                player.validate_entry(item.artist, item.album)
     except player.NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     if index == len(entries):

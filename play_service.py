@@ -43,22 +43,18 @@ def play_album(artist: str, album: str) -> None:
 
 
 def play_quickplay(index: int) -> dict:
-    """Play the quickplay entry at the given index. Raises IndexError if out of
-    range, or player.NotFoundError if the stored artist/album no longer exists."""
+    """Play the quickplay entry at the given index. An entry is either a
+    shuffle-all (whole library, randomized) or a list of items played
+    sequentially. Raises IndexError if out of range, or player.NotFoundError if a
+    stored artist/album no longer exists."""
     entries = config.load().get("quickplay", [])
     if index < 0 or index >= len(entries):
         raise IndexError(f"No quickplay entry at index {index}")
     entry = entries[index]
+    ir_blaster.select_stereo_input()
     if entry.get("shuffle", False):
-        shuffle_all()
+        player.shuffle_all()
         return {"status": "playing", "shuffle": True}
-    artist = entry.get("artist")
-    album = entry.get("album")
-    if album:
-        play_album(artist, album)
-    else:
-        play_artist(artist)
-    result = {"status": "playing", "artist": artist}
-    if album:
-        result["album"] = album
-    return result
+    items = entry.get("items", [])
+    player.play_items(items)
+    return {"status": "playing", "items": items}

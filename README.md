@@ -60,8 +60,9 @@ The full schema:
 {
   "use_sensor": false,
   "quickplay": [
-    { "artist": "Artist Name", "album": "Album Name" },
-    { "artist": "Another Artist" }
+    { "items": [ { "artist": "Artist Name", "album": "Album Name" } ] },
+    { "items": [ { "artist": "One Artist" }, { "artist": "Another Artist" } ] },
+    { "shuffle": true }
   ],
   "ir": [
     {
@@ -86,7 +87,7 @@ The full schema:
 All sections are optional. If `piserver.json` is absent or a section is missing, that feature is silently disabled and playback continues normally.
 
 - **`use_sensor`** — set to `true` to enable the photoresistor power sensor (see below). When enabled, the server checks whether the stereo is on before sending the `input` command, and powers it on first if needed. Defaults to `false`.
-- **`quickplay`** — list of artist/album targets for the `/quickplay/{index}` endpoints. Each entry has `artist`, optionally `album`, and optionally `shuffle: true` for shuffle-all.
+- **`quickplay`** — list of entries for the `/quickplay/{index}` endpoints. An entry is either `{ "shuffle": true }` (shuffle the whole library) or `{ "items": [...] }` whose items play sequentially (one queue, played from the top). Each item has `artist` and optionally `album`.
 - **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. Each entry supports two optional metadata fields in addition to the hardware fields: `class` (a display group name shown in the web UI) and `default: true` (marks the input-select command sent before playback begins). See the IR Blaster section below for field details.
 
 ## IR Blaster (Sony Stereo Input Control)
@@ -270,13 +271,16 @@ Reboot. After rebooting, `/dev/lirc1` should appear alongside `/dev/lirc0`.
 
 ### Quick Play
 
-The `quickplay` section of `piserver.json` defines a numbered list of artist/album targets for the `/quickplay/{index}` endpoints. Each entry supports:
+The `quickplay` section of `piserver.json` defines a numbered list of entries for the `/quickplay/{index}` endpoints. An entry is either a shuffle-all or an `items` array whose items are queued and played sequentially, so one badge can play several artists/albums back to back:
 
 ```json
-{"artist": "Artist Name", "album": "Album Name"}  // play a specific album
-{"artist": "Artist Name"}                          // play all albums by artist
-{"shuffle": true}                                  // shuffle everything
+{"shuffle": true}                                              // shuffle the whole library
+{"items": [{"artist": "Artist Name", "album": "Album Name"}]}  // one specific album
+{"items": [{"artist": "Artist Name"}]}                         // all albums by artist
+{"items": [{"artist": "A"}, {"artist": "B", "album": "X"}]}    // A's albums, then B's album X
 ```
+
+Each item supports `artist` and optionally `album`. Shuffle is an entry-level flag (`{"shuffle": true}`) that plays the whole library randomized — it is not combined with specific items.
 
 The list can also be managed via the API:
 

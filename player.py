@@ -134,24 +134,40 @@ def play_album(artist: str, album: str) -> None:
         mpd.play()
 
 
-def validate_entry(artist: str | None, album: str | None, shuffle: bool = False) -> None:
-    if shuffle:
-        return
+def _resolve(mpd, artist: str | None, album: str | None) -> str:
+    """Validate one selection against MPD within an open connection and return the
+    library path to queue for it. Raises NotFoundError if it no longer exists."""
     if album is not None:
         path = f"{ARTISTS_PATH}/{artist}/{album}"
-        with _connection() as mpd:
-            try:
-                entries = mpd.lsinfo(path)
-            except CommandError:
-                raise NotFoundError(f"Album not found: {artist} / {album}")
+        try:
+            entries = mpd.lsinfo(path)
+        except CommandError:
+            raise NotFoundError(f"Album not found: {artist} / {album}")
         if not entries:
             raise NotFoundError(f"Album is empty: {artist} / {album}")
-    else:
-        path = f"{ARTISTS_PATH}/{artist}"
-        with _connection() as mpd:
-            try:
-                entries = mpd.lsinfo(path)
-            except CommandError:
-                raise NotFoundError(f"Artist not found: {artist}")
-        if not [e for e in entries if "directory" in e]:
-            raise NotFoundError(f"No albums found for artist: {artist}")
+        return path
+    path = f"{ARTISTS_PATH}/{artist}"
+    try:
+        entries = mpd.lsinfo(path)
+    except CommandError:
+        raise NotFoundError(f"Artist not found: {artist}")
+    if not [e for e in entries if "directory" in e]:
+        raise NotFoundError(f"No albums found for artist: {artist}")
+    return path
+
+
+def validate_entry(artist: str | None, album: str | None) -> None:
+    with _connection() as mpd:
+        _resolve(mpd, artist, album)
+
+
+def play_items(items: list[dict]) -> None:
+    """Play a quickplay entry's items sequentially: queue each selection in order
+    and play from the top. Every item is validated before the current queue is
+    touched, so a stale selection fails without disturbing what's playing."""
+    with _connection() as mpd:
+        paths = [_resolve(mpd, it.get("artist"), it.get("album")) for it in items]
+        mpd.clear()
+        for path in paths:
+            mpd.add(path)
+        mpd.play()
