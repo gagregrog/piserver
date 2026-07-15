@@ -206,6 +206,12 @@ The server logs will show `ir_blaster: sent sony12 A:0x10 C:0x12 x3`. If you hav
 
 When `use_sensor: true` is set in `piserver.json`, the server reads a photoresistor wired to GPIO 17 before sending the input-select command. When the stereo is off (no LED light detected), it first sends the `"power"` IR command and waits for the stereo to boot, then sends `"input"`.
 
+The current sensor reading is also exposed over HTTP so other devices (e.g. the ESP32 controller) can query power state:
+
+- `GET /stereo` → `{"on": true|false|null, "sensor_enabled": bool}`
+
+`on` is the sensor reading — `true` (LED lit), `false` (dark), or `null` when the sensor is unavailable (gpiozero not installed or the pin can't be opened). The reading is taken regardless of `use_sensor`; `sensor_enabled` reports whether the auto power-on logic actually acts on it.
+
 #### Parts
 
 - LDR (photoresistor, any common 5mm type)

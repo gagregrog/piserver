@@ -8,6 +8,7 @@ import config
 import ir_blaster
 import play_service
 import player
+import stereo_sensor
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,20 @@ def restart_track():
 def current_track():
     logger.info("Current track requested")
     return player.current_track()
+
+
+@router.get("/stereo")
+def stereo_status():
+    """Report whether the system thinks the stereo is powered on.
+
+    `on` is the photoresistor sensor reading: true (LED lit), false (dark), or
+    null when the sensor is unavailable (no gpiozero / pin can't be opened).
+    `sensor_enabled` reflects the `use_sensor` config flag — when false, the
+    auto power-on logic ignores the sensor, so `on` is informational only.
+    """
+    on = stereo_sensor.is_on()
+    logger.info("Stereo status requested -> on=%s", on)
+    return {"on": on, "sensor_enabled": bool(config.load().get("use_sensor"))}
 
 
 @router.get("/queue")
