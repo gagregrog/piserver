@@ -3,7 +3,7 @@ VENV     = /home/pi/piserver/venv
 PIP      = $(VENV)/bin/pip
 SYSTEMD  = /etc/systemd/system/$(SERVICE).service
 
-.PHONY: setup deps update start stop restart status logs activate ldr
+.PHONY: setup deps update start stop restart status logs activate ldr calibrate
 
 ## First-time setup: create venv, install deps, register and start service
 setup: $(VENV) $(SYSTEMD) deps
@@ -49,4 +49,8 @@ logs:
 ## Run the LDR sensor monitor script (ADS1115)
 ldr:
 	$(VENV)/bin/python3 scripts/sense_stereo_ads.py
+
+## Guided OFF/ON calibration; writes thresholds to piserver.json
+calibrate:
+	$(VENV)/bin/python3 scripts/sense_stereo_ads.py --calibrate
 

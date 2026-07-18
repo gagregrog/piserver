@@ -278,8 +278,18 @@ That's only a 2.4× resistance ratio, so `R ≈ 62 kΩ` (nearest standard: 62 k�
 
 #### Tuning thresholds
 
+Automatic calibration (recommended once installed):
+
 ```bash
-python3 scripts/sense_stereo_ads.py
+make calibrate    # or: python3 scripts/sense_stereo_ads.py --calibrate
+```
+
+This prompts you to turn the stereo **off** (samples 100 readings), then **on** (another 100), then computes `on_threshold` / `off_threshold` that sit in the gap between the two clusters and writes them to `stereo_sensor` in `piserver.json`. It refuses to write if the on/off ranges overlap or if the on reading isn't the higher voltage. Restart with `make restart` afterward. Use `--samples N` to change the sample count.
+
+Manual monitoring:
+
+```bash
+make ldr          # or: python3 scripts/sense_stereo_ads.py
 ```
 
 This prints the live A0 voltage and the current on/off decision. Turn the stereo on and off, note the two voltages, then set `on_threshold` just below the lit voltage and `off_threshold` just above the dark voltage. The gap between them is the **hysteresis band**: readings inside it hold the previous state, so a value hovering near the edge can't chatter. If the two voltages are very close, increase `gain` (e.g. `2` or `4`) to zoom the ADC into that window for finer resolution — as long as your peak voltage stays within the gain's full-scale range (gain `1` = ±4.096 V, `2` = ±2.048 V).
