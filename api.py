@@ -27,6 +27,18 @@ class QuickplayEntry(BaseModel):
     items: list[QuickplayItem] = []
 
 
+class StereoConfig(BaseModel):
+    # Every field is optional; only the ones sent are merged into the
+    # stereo_sensor config block. address accepts an int or a hex string
+    # ("0x48").
+    enabled: bool | None = None
+    address: str | int | None = None
+    channel: int | None = None
+    gain: int | None = None
+    on_threshold: float | None = None
+    off_threshold: float | None = None
+
+
 def _item_label(item: QuickplayItem) -> str:
     return f"{item.artist}" + (f" / {item.album}" if item.album else "")
 
@@ -105,6 +117,64 @@ def stereo_status():
         "voltage": voltage,
         "sensor_enabled": stereo_sensor.is_enabled(),
     }
+
+
+@router.get("/stereo/config")
+def get_stereo_config():
+    """Return the current stereo_sensor config block with defaults applied.
+
+    Used by the web UI to populate the sensor configuration form. `address` is
+    normalized to a hex string for display.
+    """
+    cfg = stereo_sensor._cfg()
+    address = cfg.get("address", stereo_sensor.DEFAULT_ADS_ADDRESS)
+    if isinstance(address, int):
+        address = f"0x{address:02x}"
+    return {
+        "enabled": bool(cfg.get("enabled", False)),
+        "address": address,
+        "channel": cfg.get("channel", stereo_sensor.DEFAULT_ADS_CHANNEL),
+        "gain": cfg.get("gain", stereo_sensor.DEFAULT_ADS_GAIN),
+        "on_threshold": cfg.get("on_threshold", stereo_sensor.DEFAULT_ON_THRESHOLD),
+        "off_threshold": cfg.get("off_threshold", stereo_sensor.DEFAULT_OFF_THRESHOLD),
+    }
+
+
+@router.put("/stereo/config")
+def update_stereo_config(body: StereoConfig):
+    """Merge the provided fields into the stereo_sensor config block and persist.
+
+    Re-initializes the ADC afterwards so hardware changes (address / channel /
+    gain) take effect immediately without a service restart. Returns the updated
+    block.
+    """
+    updates = body.model_dump(exclude_none=True)
+    logger.info("Updating stereo_sensor config: %s", updates)
+    cfg = config.load()
+    sensor = dict(cfg.get("stereo_sensor") or {})
+    sensor.update(updates)
+    cfg["stereo_sensor"] = sensor
+    config.save(cfg)
+    # Re-ingest: drop the cached ADC handle so the next read reconfigures with
+    # the new address / channel / gain.
+    stereo_sensor.reset()
+    return {"stereo_sensor": sensor}
+
+
+@router.post("/stereo/sample")
+def stereo_sample(count: int = stereo_sensor.DEFAULT_SAMPLE_COUNT):
+    """Take a burst of ADC readings and return summary stats without writing
+    anything.
+
+    The web UI runs this once per state (stereo off / on) and lets the user
+    apply a suggested threshold to the on/off slot before saving.
+    """
+    count = max(1, min(count, 500))
+    logger.info("Stereo sample requested (count=%d)", count)
+    result = stereo_sensor.sample(count)
+    if result is None:
+        raise HTTPException(status_code=503, detail="stereo sensor unavailable")
+    return result
 
 
 @router.get("/queue")
@@ -246,19 +316,39 @@ def quickplay(index: int):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/service/mopidy/restart")
-def restart_mopidy():
-    logger.info("Mopidy restart requested")
-    result = subprocess.run(
-        ["sudo", "systemctl", "restart", "mopidy"],
-        capture_output=True, text=True
-    )
+def _run_sudo(args: list[str], what: str) -> None:
+    """Run a passwordless-sudo command, raising HTTPException on failure.
+
+    Maps a missing sudoers rule to 401 (actionable) and any other failure to
+    500. See the README for the passwordless-sudo setup the pi user needs.
+    """
+    result = subprocess.run(["sudo", *args], capture_output=True, text=True)
     if result.returncode != 0:
         if "is not allowed" in result.stderr or "password is required" in result.stderr:
             raise HTTPException(
                 status_code=401,
-                detail="Permission denied. The pi user needs passwordless sudo for 'systemctl restart mopidy'. See README for setup instructions."
+                detail=f"Permission denied. The pi user needs passwordless sudo for '{' '.join(args)}'. See README for setup instructions."
             )
-        raise HTTPException(status_code=500, detail=result.stderr or "Failed to restart mopidy")
+        raise HTTPException(status_code=500, detail=result.stderr or f"Failed to {what}")
+
+
+@router.post("/service/mopidy/restart")
+def restart_mopidy():
+    logger.info("Mopidy restart requested")
+    _run_sudo(["systemctl", "restart", "mopidy"], "restart mopidy")
     logger.info("Mopidy restarted successfully")
     return {"status": "restarted"}
+
+
+@router.post("/system/reboot")
+def system_reboot():
+    logger.info("Raspberry Pi reboot requested")
+    _run_sudo(["systemctl", "reboot"], "reboot")
+    return {"status": "rebooting"}
+
+
+@router.post("/system/shutdown")
+def system_shutdown():
+    logger.info("Raspberry Pi shutdown requested")
+    _run_sudo(["systemctl", "poweroff"], "shut down")
+    return {"status": "shutting down"}

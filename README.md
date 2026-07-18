@@ -34,17 +34,23 @@ Send a post to the available endpoints. For example, to play the queue:
 curl -X POST http://{hostname}.local:8000/play
 ```
 
-### Restarting Mopidy
+### Privileged actions (passwordless sudo)
 
-The `POST /service/mopidy/restart` endpoint restarts the mopidy service. Because this requires sudo, the `pi` user must be granted passwordless sudo for that specific command.
+A few endpoints shell out to `systemctl` and therefore need root:
 
-Run `sudo visudo` on the Pi and add this line at the end of the file:
+- `POST /service/mopidy/restart` — restart the mopidy service
+- `POST /system/reboot` — reboot the Pi
+- `POST /system/shutdown` — power the Pi off
+
+For each, the `pi` user must be granted passwordless sudo for that specific command. Run `sudo visudo` on the Pi and add these lines at the end of the file:
 
 ```
 pi ALL=(ALL) NOPASSWD: /bin/systemctl restart mopidy
+pi ALL=(ALL) NOPASSWD: /bin/systemctl reboot
+pi ALL=(ALL) NOPASSWD: /bin/systemctl poweroff
 ```
 
-Without this, the endpoint returns a `401` error.
+Without the matching line, the corresponding endpoint returns a `401` error. (Reboot and shutdown are exposed in the ESP32 web UI's Settings modal, each behind a confirmation dialog.)
 
 ## Configuration
 
@@ -206,11 +212,16 @@ The server logs will show `ir_blaster: sent sony12 A:0x10 C:0x12 x3`. If you hav
 
 When `stereo_sensor.enabled: true` is set in `piserver.json`, the server reads a photoresistor aimed at the stereo's power LED before sending the input-select command. When the stereo is off (no LED light detected), it first sends the `"power"` IR command and waits for the stereo to boot, then sends `"input"`.
 
-The current sensor reading is also exposed over HTTP so other devices (e.g. the ESP32 controller) can query power state:
+The sensor is also exposed over HTTP so other devices (e.g. the ESP32 controller) can query power state and manage the sensor entirely from the web UI:
 
 - `GET /stereo` → `{"on": true|false|null, "voltage": float|null, "sensor_enabled": bool}`
+- `GET /stereo/config` → the current `stereo_sensor` block with defaults applied (`address` normalized to a hex string) — populates the settings form
+- `PUT /stereo/config` → merge the posted fields (`enabled`, `address`, `channel`, `gain`, `on_threshold`, `off_threshold`) into `stereo_sensor`, persist, and re-initialize the ADC so hardware changes take effect without a restart
+- `POST /stereo/sample?count=100` → take a burst of readings and return `{count, mean, min, max, stdev, as_on_threshold, as_off_threshold}` **without** writing anything; the UI uses this to tune one threshold at a time
 
-`on` is the sensor reading — `true` (LED lit), `false` (dark), or `null` when the sensor is unavailable. `voltage` is the raw ADS1115 reading in volts (`null` if the ADC is unavailable) — useful for tuning thresholds from the web UI. The reading is taken regardless of `stereo_sensor.enabled`; `sensor_enabled` reports whether the auto power-on logic actually acts on it.
+`on` is the sensor reading — `true` (LED lit), `false` (dark), or `null` when the sensor is unavailable. `voltage` is the raw ADS1115 reading in volts (`null` if the ADC is unavailable). The reading is taken regardless of `stereo_sensor.enabled`; `sensor_enabled` reports whether the auto power-on logic actually acts on it.
+
+You can configure and tune the sensor without editing `piserver.json` by hand: open the ESP32 web UI's **Settings** modal → **Configure Sensor**. It shows every value as an editable field, with a **Tune** button beside each threshold that runs a sample burst (`/stereo/sample`) and fills in a suggested value. **Save** writes the whole block via `PUT /stereo/config`.
 
 The Pi has no analog input, so an **ADS1115 ADC** (over I2C) reads the LDR divider voltage and the on/off threshold is applied in software with hysteresis. Configure it under `stereo_sensor` in `piserver.json`:
 
@@ -278,6 +289,10 @@ That's only a 2.4× resistance ratio, so `R ≈ 62 kΩ` (nearest standard: 62 k�
 3. Wire the ADS1115 and re-run `i2cdetect -y 1` — `48` should now appear alongside `1a`. (If you ever run two ADS1115s, strap the second one's `ADDR` pin to `0x49`/`0x4A`/`0x4B` and set `address` accordingly.)
 
 #### Tuning thresholds
+
+**From the web UI (easiest):** Settings → Configure Sensor → **Tune** beside each threshold (see above). No SSH needed.
+
+The command-line tools below do the same thing over SSH.
 
 Automatic calibration (recommended once installed):
 

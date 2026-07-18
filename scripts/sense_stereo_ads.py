@@ -17,7 +17,6 @@ Reads ADS1115 config (address, channel, gain, thresholds) from piserver.json.
 
 import argparse
 import os
-import statistics
 import sys
 import time
 
@@ -29,8 +28,7 @@ import config
 import stereo_sensor
 
 POLL_SECONDS = 0.25
-SAMPLE_COUNT = 100
-SAMPLE_DELAY = 0.02
+SAMPLE_COUNT = stereo_sensor.DEFAULT_SAMPLE_COUNT
 # Thresholds are placed this fraction of the gap in from each cluster edge, so
 # the hysteresis deadband spans the middle (1 - 2*MARGIN) of the gap.
 GAP_MARGIN = 0.25
@@ -60,31 +58,23 @@ def monitor():
         time.sleep(POLL_SECONDS)
 
 
+def _print_progress(done, total):
+    print(f"\r  sampling... {done}/{total}", end="", flush=True)
+
+
 def _sample(n):
-    """Collect n voltage readings, skipping unavailable ones. Returns the list."""
-    samples = []
-    misses = 0
-    while len(samples) < n:
-        v = stereo_sensor.read_voltage()
-        if v is None:
-            misses += 1
-            if misses > n:
-                break
-            continue
-        samples.append(v)
-        print(f"\r  sampling... {len(samples)}/{n}", end="", flush=True)
-        time.sleep(SAMPLE_DELAY)
+    """Collect n readings via stereo_sensor.sample(). Returns the stats dict or
+    None if the ADC is unavailable."""
+    stats = stereo_sensor.sample(n, on_progress=_print_progress)
     print()
-    return samples
+    return stats
 
 
-def _summarize(label, samples):
-    lo, hi = min(samples), max(samples)
-    mean = statistics.fmean(samples)
-    stdev = statistics.pstdev(samples)
-    print(f"  {label}: mean {mean:.3f} V, min {lo:.3f} V, max {hi:.3f} V, "
-          f"stdev {stdev:.4f} V ({len(samples)} samples)")
-    return {"lo": lo, "hi": hi, "mean": mean}
+def _summarize(label, stats):
+    print(f"  {label}: mean {stats['mean']:.3f} V, min {stats['min']:.3f} V, "
+          f"max {stats['max']:.3f} V, stdev {stats['stdev']:.4f} V "
+          f"({stats['count']} samples)")
+    return stats
 
 
 def _prompt(message):
@@ -128,7 +118,7 @@ def calibrate(n):
         print("wiring (LDR on the 3.3V side of the divider) and retry.")
         return 1
 
-    off_hi, on_lo = off_stats["hi"], on_stats["lo"]
+    off_hi, on_lo = off_stats["max"], on_stats["min"]
     gap = on_lo - off_hi
     if gap <= 0:
         print(f"\nERROR: the OFF and ON ranges overlap (OFF max {off_hi:.3f} V "
