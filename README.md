@@ -58,7 +58,7 @@ The full schema:
 
 ```json
 {
-  "use_sensor": false,
+  "stereo_sensor": { "enabled": false },
   "quickplay": [
     { "items": [{ "artist": "Artist Name", "album": "Album Name" }] },
     { "items": [{ "artist": "One Artist" }, { "artist": "Another Artist" }] },
@@ -86,7 +86,7 @@ The full schema:
 
 All sections are optional. If `piserver.json` is absent or a section is missing, that feature is silently disabled and playback continues normally.
 
-- **`use_sensor`** — set to `true` to enable the photoresistor power sensor (see below). When enabled, the server checks whether the stereo is on before sending the `input` command, and powers it on first if needed. Defaults to `false`.
+- **`stereo_sensor`** — photoresistor power-sensor config (see below). Set `enabled: true` to activate it; the server then checks whether the stereo is on before sending the `input` command, and powers it on first if needed. Defaults to disabled. Other keys (`address`, `channel`, `gain`, `on_threshold`, `off_threshold`) configure the ADS1115 and detection thresholds.
 - **`quickplay`** — list of entries for the `/quickplay/{index}` endpoints. An entry is either `{ "shuffle": true }` (shuffle the whole library) or `{ "items": [...] }` whose items play sequentially (one queue, played from the top). Each item has `artist` and optionally `album`.
 - **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. Each entry supports two optional metadata fields in addition to the hardware fields: `class` (a display group name shown in the web UI) and `default: true` (marks the input-select command sent before playback begins). See the IR Blaster section below for field details.
 
@@ -204,18 +204,19 @@ The server logs will show `ir_blaster: sent sony12 A:0x10 C:0x12 x3`. If you hav
 
 ### Photoresistor Power Sensor (optional — auto power-on)
 
-When `use_sensor: true` is set in `piserver.json`, the server reads a photoresistor aimed at the stereo's power LED before sending the input-select command. When the stereo is off (no LED light detected), it first sends the `"power"` IR command and waits for the stereo to boot, then sends `"input"`.
+When `stereo_sensor.enabled: true` is set in `piserver.json`, the server reads a photoresistor aimed at the stereo's power LED before sending the input-select command. When the stereo is off (no LED light detected), it first sends the `"power"` IR command and waits for the stereo to boot, then sends `"input"`.
 
 The current sensor reading is also exposed over HTTP so other devices (e.g. the ESP32 controller) can query power state:
 
 - `GET /stereo` → `{"on": true|false|null, "voltage": float|null, "sensor_enabled": bool}`
 
-`on` is the sensor reading — `true` (LED lit), `false` (dark), or `null` when the sensor is unavailable. `voltage` is the raw ADS1115 reading in volts (`null` if the ADC is unavailable) — useful for tuning thresholds from the web UI. The reading is taken regardless of `use_sensor`; `sensor_enabled` reports whether the auto power-on logic actually acts on it.
+`on` is the sensor reading — `true` (LED lit), `false` (dark), or `null` when the sensor is unavailable. `voltage` is the raw ADS1115 reading in volts (`null` if the ADC is unavailable) — useful for tuning thresholds from the web UI. The reading is taken regardless of `stereo_sensor.enabled`; `sensor_enabled` reports whether the auto power-on logic actually acts on it.
 
 The Pi has no analog input, so an **ADS1115 ADC** (over I2C) reads the LDR divider voltage and the on/off threshold is applied in software with hysteresis. Configure it under `stereo_sensor` in `piserver.json`:
 
 ```json
 "stereo_sensor": {
+  "enabled": false,         // true => sensor drives auto power-on
   "address": "0x48",       // I2C address (int or hex string)
   "channel": 0,             // input channel A0..A3
   "gain": 1,                // PGA gain (2/3, 1, 2, 4, 8, 16)
@@ -224,7 +225,7 @@ The Pi has no analog input, so an **ADS1115 ADC** (over I2C) reads the LDR divid
 }
 ```
 
-All keys are optional and fall back to the defaults shown above.
+All keys are optional. `enabled` defaults to `false` (sensor readable via `/stereo` but not driving auto power-on); the rest fall back to the defaults shown above.
 
 #### Parts
 

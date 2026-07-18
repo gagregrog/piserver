@@ -99,11 +99,11 @@ def send_command(key: str, count: int = 1) -> None:
 def power_on_stereo() -> None:
     """Send the power-on IR command if the sensor indicates the stereo is off.
 
-    Silently skips if use_sensor is not enabled in piserver.json, or if the
-    sensor is unavailable. The 'power' IR command is also silently skipped if
-    absent from config.
+    Silently skips if the stereo sensor is not enabled in piserver.json, or if
+    the sensor is unavailable. The 'power' IR command is also silently skipped
+    if absent from config.
     """
-    if not config.load().get("use_sensor"):
+    if not stereo_sensor.is_enabled():
         return
     if stereo_sensor.is_on() is False:
         logger.info("ir_blaster: stereo is off — sending power command")

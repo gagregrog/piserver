@@ -23,6 +23,15 @@ def _cfg() -> dict:
     return config.load().get("stereo_sensor", {}) or {}
 
 
+def is_enabled() -> bool:
+    """Whether the stereo sensor is enabled (stereo_sensor.enabled in config).
+
+    When disabled, the auto power-on logic ignores the sensor; the /stereo
+    endpoint still reports the raw reading for informational purposes.
+    """
+    return bool(_cfg().get("enabled"))
+
+
 def _as_int(value, default: int) -> int:
     """Accept an int or a hex/decimal string (e.g. 72 or "0x48")."""
     if value is None:

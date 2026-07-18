@@ -1,6 +1,6 @@
 {
-  "use_sensor": false,
   "stereo_sensor": {
+    "enabled": false,
     "address": "0x48",
     "channel": 0,
     "gain": 1,

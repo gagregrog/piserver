@@ -93,8 +93,9 @@ def stereo_status():
     `on` is the sensor reading: true (LED lit), false (dark), or null when the
     sensor is unavailable. `voltage` is the raw ADS1115 reading in volts (null
     if the ADC is unavailable) — handy for tuning thresholds from the web UI.
-    `sensor_enabled` reflects the `use_sensor` config flag — when false, the
-    auto power-on logic ignores the sensor, so `on` is informational only.
+    `sensor_enabled` reflects the `stereo_sensor.enabled` config flag — when
+    false, the auto power-on logic ignores the sensor, so `on` is informational
+    only.
     """
     on = stereo_sensor.is_on()
     voltage = stereo_sensor.read_voltage()
@@ -102,7 +103,7 @@ def stereo_status():
     return {
         "on": on,
         "voltage": voltage,
-        "sensor_enabled": bool(config.load().get("use_sensor")),
+        "sensor_enabled": stereo_sensor.is_enabled(),
     }
 
 

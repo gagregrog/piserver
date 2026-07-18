@@ -158,8 +158,9 @@ def calibrate(n):
     data["stereo_sensor"] = sensor
     config.save(data)
     print(f"Wrote thresholds to {config.CONFIG_FILE}.")
-    if not data.get("use_sensor"):
-        print('Note: "use_sensor" is false — set it true to enable the sensor.')
+    if not sensor.get("enabled"):
+        print('Note: "stereo_sensor.enabled" is false — set it true to enable '
+              'the sensor.')
     print("Restart the service to pick up changes: make restart")
     return 0
 
