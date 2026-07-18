@@ -90,14 +90,20 @@ def current_track():
 def stereo_status():
     """Report whether the system thinks the stereo is powered on.
 
-    `on` is the photoresistor sensor reading: true (LED lit), false (dark), or
-    null when the sensor is unavailable (no gpiozero / pin can't be opened).
+    `on` is the sensor reading: true (LED lit), false (dark), or null when the
+    sensor is unavailable. `voltage` is the raw ADS1115 reading in volts (null
+    if the ADC is unavailable) — handy for tuning thresholds from the web UI.
     `sensor_enabled` reflects the `use_sensor` config flag — when false, the
     auto power-on logic ignores the sensor, so `on` is informational only.
     """
     on = stereo_sensor.is_on()
-    logger.info("Stereo status requested -> on=%s", on)
-    return {"on": on, "sensor_enabled": bool(config.load().get("use_sensor"))}
+    voltage = stereo_sensor.read_voltage()
+    logger.info("Stereo status requested -> on=%s v=%s", on, voltage)
+    return {
+        "on": on,
+        "voltage": voltage,
+        "sensor_enabled": bool(config.load().get("use_sensor")),
+    }
 
 
 @router.get("/queue")

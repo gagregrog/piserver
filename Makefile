@@ -12,7 +12,7 @@ setup: $(VENV) $(SYSTEMD) deps
 	sudo systemctl start $(SERVICE)
 
 $(VENV):
-	sudo apt install -y python3-full python3-pip ir-keytable swig liblgpio-dev
+	sudo apt install -y python3-full python3-pip ir-keytable swig liblgpio-dev i2c-tools
 	python3 -m venv $(VENV)
 
 $(SYSTEMD): $(SERVICE).service
@@ -46,7 +46,7 @@ status:
 logs:
 	sudo journalctl -u $(SERVICE) -f
 
-## Run the LDR sensor monitor script
+## Run the LDR sensor monitor script (ADS1115)
 ldr:
-	$(VENV)/bin/python3 scripts/sense_stereo.py
+	$(VENV)/bin/python3 scripts/sense_stereo_ads.py
 

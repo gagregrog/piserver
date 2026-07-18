@@ -60,8 +60,8 @@ The full schema:
 {
   "use_sensor": false,
   "quickplay": [
-    { "items": [ { "artist": "Artist Name", "album": "Album Name" } ] },
-    { "items": [ { "artist": "One Artist" }, { "artist": "Another Artist" } ] },
+    { "items": [{ "artist": "Artist Name", "album": "Album Name" }] },
+    { "items": [{ "artist": "One Artist" }, { "artist": "Another Artist" }] },
     { "shuffle": true }
   ],
   "ir": [
@@ -204,46 +204,85 @@ The server logs will show `ir_blaster: sent sony12 A:0x10 C:0x12 x3`. If you hav
 
 ### Photoresistor Power Sensor (optional — auto power-on)
 
-When `use_sensor: true` is set in `piserver.json`, the server reads a photoresistor wired to GPIO 17 before sending the input-select command. When the stereo is off (no LED light detected), it first sends the `"power"` IR command and waits for the stereo to boot, then sends `"input"`.
+When `use_sensor: true` is set in `piserver.json`, the server reads a photoresistor aimed at the stereo's power LED before sending the input-select command. When the stereo is off (no LED light detected), it first sends the `"power"` IR command and waits for the stereo to boot, then sends `"input"`.
 
 The current sensor reading is also exposed over HTTP so other devices (e.g. the ESP32 controller) can query power state:
 
-- `GET /stereo` → `{"on": true|false|null, "sensor_enabled": bool}`
+- `GET /stereo` → `{"on": true|false|null, "voltage": float|null, "sensor_enabled": bool}`
 
-`on` is the sensor reading — `true` (LED lit), `false` (dark), or `null` when the sensor is unavailable (gpiozero not installed or the pin can't be opened). The reading is taken regardless of `use_sensor`; `sensor_enabled` reports whether the auto power-on logic actually acts on it.
+`on` is the sensor reading — `true` (LED lit), `false` (dark), or `null` when the sensor is unavailable. `voltage` is the raw ADS1115 reading in volts (`null` if the ADC is unavailable) — useful for tuning thresholds from the web UI. The reading is taken regardless of `use_sensor`; `sensor_enabled` reports whether the auto power-on logic actually acts on it.
+
+The Pi has no analog input, so an **ADS1115 ADC** (over I2C) reads the LDR divider voltage and the on/off threshold is applied in software with hysteresis. Configure it under `stereo_sensor` in `piserver.json`:
+
+```json
+"stereo_sensor": {
+  "address": "0x48",       // I2C address (int or hex string)
+  "channel": 0,             // input channel A0..A3
+  "gain": 1,                // PGA gain (2/3, 1, 2, 4, 8, 16)
+  "on_threshold": 2.0,      // volts, reading >= this => ON
+  "off_threshold": 1.5      // volts, reading <= this => OFF
+}
+```
+
+All keys are optional and fall back to the defaults shown above.
 
 #### Parts
 
-- LDR (photoresistor, any common 5mm type)
-- 10 kΩ resistor (or a potentiometer for initial tuning — see below)
+- ADS1115 16-bit ADC breakout
+- LDR (photoresistor, any common 5 mm type)
+- One fixed resistor for the LDR divider (see tuning below)
 
-**Why GPIO 17?** GPIO 18–21 are claimed by the Waveshare audio HAT (I2S), GPIO 12 is IR TX, GPIO 24 is IR RX, and GPIO 2/3 are I2C. GPIO 17 is free.
+Aim the LDR at the power LED and shroud it (heatshrink / short tube) to block ambient light — reliability depends far more on a clean on/off light gap than on the electronics.
 
 #### Wiring
 
-Point the LDR at the power LED on the stereo.
+ADS1115 on the I2C bus, LDR divider into A0:
 
 ```
-3.3V (Pin  1) ──[LDR]──┬── GPIO 17 (Pin 11)
-                      [10kΩ]
-                        │
-               GND (Pin  9) ──┘
+ADS1115         Pi
+  VDD  ───────  3.3V (Pin  1)
+  GND  ───────  GND  (Pin  9)
+  SCL  ───────  GPIO 3 / SCL (Pin  5)
+  SDA  ───────  GPIO 2 / SDA (Pin  3)
+  ADDR ───────  GND          (I2C address 0x48)
+
+3.3V ──[LDR]──┬── A0 (ADS1115)
+             [R]
+              │
+             GND
 ```
 
-- **Stereo on (LED lit):** LDR resistance drops → voltage at GPIO rises → reads HIGH
-- **Stereo off (dark):** LDR resistance rises → 10 kΩ pulls low → reads LOW
+- **Stereo on (LED lit):** LDR resistance drops → A0 voltage rises → above `on_threshold`
+- **Stereo off (dark):** LDR resistance rises → A0 voltage falls → below `off_threshold`
 
-#### Tuning the resistor
+Pick the divider resistor `R` near the **geometric mean** of the LDR's lit and dark resistances (`R ≈ √(R_on × R_off)`, measured with a multimeter) to maximize the on/off voltage swing.
 
-The 10 kΩ value is a starting point. Depending on how bright the stereo's LED is and how closely you can aim the LDR, you may need to adjust it. Use a potentiometer in place of the fixed resistor while tuning, then replace it with the nearest fixed resistor value once the reading is stable.
+**Measured on this stereo** (for reference — yours may differ with LED brightness and how the LDR is aimed/shrouded):
 
-To monitor the sensor reading in real time while adjusting:
+| State          | LDR resistance | A0 voltage (R = 62 kΩ) |
+| -------------- | -------------- | ---------------------- |
+| LED on (lit)   | 40.1 kΩ        | 2.00 V                 |
+| LED off (dark) | 96.7 kΩ        | 1.29 V                 |
+
+That's only a 2.4× resistance ratio, so `R ≈ 62 kΩ` (nearest standard: 62 kΩ or 68 kΩ) gives the widest swing — a ~0.71 V gap between on and off. The Pi's GPIO couldn't resolve that (both voltages sit in the digital gray zone, which is why a comparator was originally needed), but the ADS1115 reads the raw voltage, so 0.71 V is plenty. Suitable thresholds for these readings: `on_threshold` ≈ 1.8, `off_threshold` ≈ 1.5. A trimmer pot in place of `R` (≈100 kΩ, wired as a rheostat) lets you tune the window at install time; the gap stays ~0.7 V anywhere from ~50–100 kΩ, so the exact setting isn't critical.
+
+**Why I2C?** GPIO 18–21 are claimed by the Waveshare WM8960 HAT (I2S audio), GPIO 12 is IR TX, GPIO 24 is IR RX. The ADS1115 rides the existing I2C bus on GPIO 2/3, so it needs no dedicated GPIO.
+
+**I2C is already enabled.** The WM8960 is an I2C-controlled codec — the `wm8960-soundcard` service waits for it to appear on I2C, so `dtparam=i2c_arm=on` is already in effect on any Pi where audio works. No conflict either: the WM8960 lives at address `0x1a`, the ADS1115 at `0x48`, so they share the bus fine.
+
+#### Setup
+
+1. Confirm the bus and devices: `i2cdetect -y 1`. You should already see `1a` (the WM8960 — proof I2C is up). If for some reason it's off, enable it with `sudo raspi-config` → Interface Options → I2C and reboot.
+2. Install deps (included in `requirements.txt`): `pip install -r requirements.txt`
+3. Wire the ADS1115 and re-run `i2cdetect -y 1` — `48` should now appear alongside `1a`. (If you ever run two ADS1115s, strap the second one's `ADDR` pin to `0x49`/`0x4A`/`0x4B` and set `address` accordingly.)
+
+#### Tuning thresholds
 
 ```bash
-python3 scripts/sense_stereo.py
+python3 scripts/sense_stereo_ads.py
 ```
 
-This prints `ON` or `OFF` (with a timestamp) each time the reading changes. Aim for the GPIO voltage to be clearly above ~2 V when the LED is lit and clearly below ~1.3 V when dark.
+This prints the live A0 voltage and the current on/off decision. Turn the stereo on and off, note the two voltages, then set `on_threshold` just below the lit voltage and `off_threshold` just above the dark voltage. The gap between them is the **hysteresis band**: readings inside it hold the previous state, so a value hovering near the edge can't chatter. If the two voltages are very close, increase `gain` (e.g. `2` or `4`) to zoom the ADC into that window for finer resolution — as long as your peak voltage stays within the gain's full-scale range (gain `1` = ±4.096 V, `2` = ±2.048 V).
 
 ### IR Receiver (optional — for discovering command codes)
 

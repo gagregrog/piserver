@@ -2,10 +2,7 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
 click==8.3.2
-colorzero==2.0
 fastapi==0.135.3
-gpiozero==2.0.1
-lgpio==0.2.2.0
 h11==0.16.0
 idna==3.11
 pydantic==2.12.5
@@ -16,3 +13,5 @@ starlette==1.0.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.43.0
+adafruit-circuitpython-ads1x15
+adafruit-blinka

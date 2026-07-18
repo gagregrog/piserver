@@ -1,5 +1,12 @@
 {
   "use_sensor": false,
+  "stereo_sensor": {
+    "address": "0x48",
+    "channel": 0,
+    "gain": 1,
+    "on_threshold": 2.0,
+    "off_threshold": 1.5
+  },
   "quickplay": [
     {
       "items": [
