@@ -48,14 +48,13 @@ def _init_ads() -> None:
         import adafruit_ads1x15.ads1115 as ADS  # type: ignore[import]
         from adafruit_ads1x15.analog_in import AnalogIn  # type: ignore[import]
 
-        pins = [ADS.P0, ADS.P1, ADS.P2, ADS.P3]
         if channel < 0 or channel > 3:
             logger.warning("stereo_sensor: bad ADS channel %r, using 0", channel)
             channel = 0
         i2c = busio.I2C(board.SCL, board.SDA)
         ads = ADS.ADS1115(i2c, address=address)
         ads.gain = gain
-        _ads_channel = AnalogIn(ads, pins[channel])
+        _ads_channel = AnalogIn(ads, channel)
         logger.info(
             "stereo_sensor: ADS1115 at 0x%02x channel A%d gain %s",
             address, channel, gain,
