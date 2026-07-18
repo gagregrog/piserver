@@ -45,12 +45,20 @@ A few endpoints shell out to `systemctl` and therefore need root:
 For each, the `pi` user must be granted passwordless sudo for that specific command. Run `sudo visudo` on the Pi and add these lines at the end of the file:
 
 ```
-pi ALL=(ALL) NOPASSWD: /bin/systemctl restart mopidy
-pi ALL=(ALL) NOPASSWD: /bin/systemctl reboot
-pi ALL=(ALL) NOPASSWD: /bin/systemctl poweroff
+pi ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart mopidy
+pi ALL=(ALL) NOPASSWD: /usr/bin/systemctl reboot
+pi ALL=(ALL) NOPASSWD: /usr/bin/systemctl poweroff
 ```
 
-Without the matching line, the corresponding endpoint returns a `401` error. (Reboot and shutdown are exposed in the ESP32 web UI's Settings modal, each behind a confirmation dialog.)
+> **⚠️ The path must match exactly.** sudo matches on the full binary path, so `systemctl` must be written with its real location. On current Raspberry Pi OS that's `/usr/bin/systemctl` (as used above). **Verify it on your Pi first:**
+>
+> ```
+> which systemctl
+> ```
+>
+> If it prints a different path (older images used `/bin/systemctl`), use that instead. A mismatch means sudo still prompts for a password and the endpoint returns `401`. Confirm a rule works without rebooting: `sudo -n systemctl restart mopidy && echo OK` — `-n` fails instead of prompting if the rule is wrong.
+
+`visudo` changes take effect immediately (no restart needed). Without the matching line, the corresponding endpoint returns a `401` error. (Reboot, shutdown, and mopidy restart are exposed in the ESP32 web UI's Settings modal, each behind a confirmation dialog.)
 
 ## Configuration
 
