@@ -234,7 +234,15 @@ def play_album(artist: str, album: str):
 @router.get("/ir")
 def list_ir_functions():
     ir_config = config.load().get("ir", [])
-    return [{"name": item.get("name", ""), "class": item.get("class", "")} for item in ir_config]
+    return [
+        {
+            "name": item.get("name", ""),
+            # Human-friendly label for the UI; falls back to the raw name.
+            "label": item.get("label") or item.get("name", ""),
+            "class": item.get("class", ""),
+        }
+        for item in ir_config
+    ]
 
 
 @router.post("/ir/{function}")

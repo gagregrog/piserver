@@ -19,6 +19,7 @@
   "ir": [
     {
       "name": "power",
+      "label": "Power",
       "class": "system",
       "sirc": { "address": "0x10", "command": "0x00" },
       "repeat": 3,
@@ -26,6 +27,7 @@
     },
     {
       "name": "audio",
+      "label": "Music",
       "class": "input",
       "default": true,
       "sirc": { "address": "0x10", "command": "0x00" },

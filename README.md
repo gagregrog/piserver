@@ -102,7 +102,7 @@ All sections are optional. If `piserver.json` is absent or a section is missing,
 
 - **`stereo_sensor`** — photoresistor power-sensor config (see below). Set `enabled: true` to activate it; the server then checks whether the stereo is on before sending the `input` command, and powers it on first if needed. Defaults to disabled. Other keys (`address`, `channel`, `gain`, `on_threshold`, `off_threshold`) configure the ADS1115 and detection thresholds.
 - **`quickplay`** — list of entries for the `/quickplay/{index}` endpoints. An entry is either `{ "shuffle": true }` (shuffle the whole library) or `{ "items": [...] }` whose items play sequentially (one queue, played from the top). Each item has `artist` and optionally `album`.
-- **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. Each entry supports two optional metadata fields in addition to the hardware fields: `class` (a display group name shown in the web UI) and `default: true` (marks the input-select command sent before playback begins). See the IR Blaster section below for field details.
+- **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. Each entry supports optional metadata fields in addition to the hardware fields: `class` (a display group name shown in the web UI), `label` (human-friendly button text, falling back to `name`), and `default: true` (marks the input-select command sent before playback begins). See the IR Blaster section below for field details.
 
 ## IR Blaster (Sony Stereo Input Control)
 
@@ -199,6 +199,7 @@ Per-command fields:
 
 - **`name`** — unique identifier for this command, used in the `POST /ir/{name}` API. The endpoint accepts an optional `count` query param (e.g. `POST /ir/volumeUp?count=3`) to send the command as that many discrete presses in a single request — each press is a full `repeat`-frame burst separated by `delay`. Defaults to `1`.
 - **`class`** — display group shown in the web UI (e.g. `"system"`, `"input"`).
+- **`label`** — human-friendly button text shown in the web UI (e.g. `"Apple TV"`). Optional; falls back to `name` when omitted. Returned by `GET /ir` alongside `name` and `class`.
 - **`default`** — set to `true` on the command the server sends before starting playback (input-select). Only one entry should have this.
 - **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).
 - **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.
