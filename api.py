@@ -1,7 +1,7 @@
 import logging
 import subprocess
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 import config
@@ -243,9 +243,57 @@ def list_ir_functions():
             # When true, the UI renders a shared increment stepper for this
             # command's class and sends the chosen value as `count`.
             "qty": bool(item.get("qty", False)),
+            # When true, the UI renders a "Floor" button for this command's
+            # class that triggers POST /volume/floor.
+            "floor": bool(item.get("floor", False)),
+            # When true, the UI renders a "Target" button for this command's
+            # class that triggers POST /volume/startup.
+            "startup": bool(item.get("startup", False)),
         }
         for item in ir_config
     ]
+
+
+@router.post("/volume/floor", status_code=202)
+def volume_floor(background_tasks: BackgroundTasks):
+    """Drive the receiver's volume to zero using the `volume` policy block.
+
+    Flooring sends dozens of spaced IR presses (several seconds), so the send
+    runs in the background and the request returns immediately — the client
+    should not hold the connection open for the whole burst.
+    """
+    logger.info("Volume floor requested")
+    vol = config.load().get("volume") or {}
+    if not vol.get("down"):
+        raise HTTPException(status_code=404, detail="volume floor not configured")
+    background_tasks.add_task(ir_blaster.floor_volume)
+    return {"status": "flooring"}
+
+
+@router.post("/volume/startup", status_code=202)
+def volume_startup(background_tasks: BackgroundTasks):
+    """Drive the receiver to the configured target volume (floor, then step up).
+
+    Runs in the background (see /volume/floor) and returns immediately.
+    """
+    logger.info("Volume startup (target level) requested")
+    vol = config.load().get("volume") or {}
+    if not (vol.get("down") and vol.get("up")):
+        raise HTTPException(status_code=404, detail="volume startup not configured")
+    background_tasks.add_task(ir_blaster.apply_startup_volume)
+    return {"status": "normalizing"}
+
+
+@router.post("/stereo/off", status_code=202)
+def stereo_off(background_tasks: BackgroundTasks):
+    """Floor the volume, then power the receiver off — in that order.
+
+    Runs in the background and returns immediately so the controller's stop-hold
+    doesn't block while the volume floors before power-off.
+    """
+    logger.info("Stereo off requested (floor, then power off)")
+    background_tasks.add_task(ir_blaster.shutdown_stereo)
+    return {"status": "powering off"}
 
 
 @router.post("/ir/{function}")

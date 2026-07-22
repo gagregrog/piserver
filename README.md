@@ -103,6 +103,7 @@ All sections are optional. If `piserver.json` is absent or a section is missing,
 - **`stereo_sensor`** — photoresistor power-sensor config (see below). Set `enabled: true` to activate it; the server then checks whether the stereo is on before sending the `input` command, and powers it on first if needed. Defaults to disabled. Other keys (`address`, `channel`, `gain`, `on_threshold`, `off_threshold`) configure the ADS1115 and detection thresholds.
 - **`quickplay`** — list of entries for the `/quickplay/{index}` endpoints. An entry is either `{ "shuffle": true }` (shuffle the whole library) or `{ "items": [...] }` whose items play sequentially (one queue, played from the top). Each item has `artist` and optionally `album`.
 - **`ir`** — IR command codes for the stereo. Keys map to Sony SIRC commands. Each entry supports optional metadata fields in addition to the hardware fields: `class` (a display group name shown in the web UI), `label` (human-friendly button text, falling back to `name`), and `default: true` (marks the input-select command sent before playback begins). See the IR Blaster section below for field details.
+- **`volume`** — server-side volume policy (see below). Names the up/down commands and configures the startup volume normalization run on a cold start. Optional; omit to disable.
 
 ## IR Blaster (Sony Stereo Input Control)
 
@@ -201,12 +202,46 @@ Per-command fields:
 - **`class`** — display group shown in the web UI (e.g. `"system"`, `"input"`).
 - **`label`** — human-friendly button text shown in the web UI (e.g. `"Apple TV"`). Optional; falls back to `name` when omitted. Returned by `GET /ir` alongside `name` and `class`.
 - **`qty`** — set to `true` to let the web UI drive this command with its class's shared increment stepper (used for `volumeUp`/`volumeDown`). Tapping the button sends the stepper's value as `count`. Optional; defaults to `false`, meaning a single press. Returned by `GET /ir`.
+- **`floor`** — set to `true` to add a **Floor** button to this command's class in the web UI, triggering `POST /volume/floor` (drives volume to zero). Conventionally set on `volumeDown`. Requires a `volume` block (see below). Optional; defaults to `false`. Returned by `GET /ir`.
+- **`startup`** — set to `true` to add a **Target** button to this command's class in the web UI, triggering `POST /volume/startup` (drives volume to the configured target level). Conventionally set on `volumeUp`. Requires a `volume` block (see below). Optional; defaults to `false`. Returned by `GET /ir`.
 - **`default`** — set to `true` on the command the server sends before starting playback (input-select). Only one entry should have this.
 - **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).
 - **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.
 - **`delay`** — seconds to wait after sending. Useful for the input command (stereo input switch time) or power command (stereo boot time). Omit or set to `0` for no delay.
 
 The entry with `"name": "power"` is sent first when the sensor detects the stereo is off (see below).
+
+### Volume Policy (startup normalization + floor)
+
+The receiver exposes only *relative* volume (up/down), so there's no way to command an absolute level directly. The optional `volume` block names the up/down commands and defines two compound actions the server can perform:
+
+```json
+"volume": {
+  "up": "volumeUp",
+  "down": "volumeDown",
+  "floor_presses": 40,
+  "startup_presses": 15
+}
+```
+
+- **`up`** / **`down`** — the `ir[]` command `name`s for volume up/down. Required.
+- **`floor_presses`** — down-presses used to reach zero (the "floor" action). Set this at or above your receiver's maximum volume so the floor is guaranteed regardless of where it started. Defaults to `50`.
+- **`startup_presses`** — up-presses sent after flooring on a cold start; since it starts from zero, this is also the resulting volume level. Defaults to `15`.
+
+Both actions send discrete presses via the same `count` mechanism as the web UI's volume stepper: each press is a SIRC burst spaced by the command's own `delay`. That spacing is what makes every press register — which is why bumping a command's `repeat` count doesn't work (`repeat` frames read as a single held button). If the receiver ever drops presses at high counts, raise the volume command's `delay` in `ir[]`.
+
+**Startup normalization** (floor, then step up to `startup_presses`) runs automatically on a cold start — when the stereo sensor confirms the stereo was off and the server powered it on. With the sensor disabled or unavailable it's skipped, so mid-session plays never reset the volume. Requires the [photoresistor power sensor](#photoresistor-power-sensor-optional--auto-power-on).
+
+Both compound actions are also available on demand, and both appear in the web UI's volume group (via the `floor` / `startup` command flags above):
+
+- `POST /volume/floor` — floor the volume to zero (the **Floor** button).
+- `POST /volume/startup` — drive to the target level: floor, then step up to `startup_presses` (the **Target** button). Gives a deterministic absolute volume from any starting point.
+
+Each sends dozens of spaced IR presses (several seconds), so both **return `202` immediately and run the presses in a background task** — clients don't hold the connection open for the burst. Sends are serialized with a lock, so overlapping requests queue rather than interleave on the single blaster.
+
+A related shutdown macro pairs with the controller's stop-hold:
+
+- `POST /stereo/off` — floor the volume, **then** power the receiver off (in that order), in the background. Sequencing this server-side is why the controller can fire it and return immediately without the volume-down and power-off racing.
 
 ### Testing
 

@@ -7,6 +7,12 @@
     "on_threshold": 2.0,
     "off_threshold": 1.5
   },
+  "volume": {
+    "up": "volumeUp",
+    "down": "volumeDown",
+    "floor_presses": 40,
+    "startup_presses": 15
+  },
   "quickplay": [
     {
       "items": [
@@ -33,6 +39,26 @@
       "sirc": { "address": "0x10", "command": "0x00" },
       "repeat": 3,
       "delay": 0.5
+    },
+    {
+      "name": "volumeDown",
+      "label": "Down",
+      "class": "volume",
+      "qty": true,
+      "floor": true,
+      "sirc": { "address": "0x10", "command": "0x00" },
+      "repeat": 3,
+      "delay": 0.1
+    },
+    {
+      "name": "volumeUp",
+      "label": "Up",
+      "class": "volume",
+      "qty": true,
+      "startup": true,
+      "sirc": { "address": "0x10", "command": "0x00" },
+      "repeat": 3,
+      "delay": 0.1
     }
   ]
 }
