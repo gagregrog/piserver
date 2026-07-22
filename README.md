@@ -200,6 +200,7 @@ Per-command fields:
 - **`name`** — unique identifier for this command, used in the `POST /ir/{name}` API. The endpoint accepts an optional `count` query param (e.g. `POST /ir/volumeUp?count=3`) to send the command as that many discrete presses in a single request — each press is a full `repeat`-frame burst separated by `delay`. Defaults to `1`.
 - **`class`** — display group shown in the web UI (e.g. `"system"`, `"input"`).
 - **`label`** — human-friendly button text shown in the web UI (e.g. `"Apple TV"`). Optional; falls back to `name` when omitted. Returned by `GET /ir` alongside `name` and `class`.
+- **`qty`** — set to `true` to let the web UI drive this command with its class's shared increment stepper (used for `volumeUp`/`volumeDown`). Tapping the button sends the stepper's value as `count`. Optional; defaults to `false`, meaning a single press. Returned by `GET /ir`.
 - **`default`** — set to `true` on the command the server sends before starting playback (input-select). Only one entry should have this.
 - **`sirc`** — object with `address` and `command`. The SIRC variant is selected automatically based on address width: addresses up to `0x1F` use SIRC-12 (5-bit address); addresses up to `0xFF` use SIRC-15 (8-bit address).
 - **`repeat`** — number of times to send the frame. Sony SIRC requires `3`. Defaults to `1`.

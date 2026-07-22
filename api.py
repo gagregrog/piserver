@@ -240,6 +240,9 @@ def list_ir_functions():
             # Human-friendly label for the UI; falls back to the raw name.
             "label": item.get("label") or item.get("name", ""),
             "class": item.get("class", ""),
+            # When true, the UI renders a shared increment stepper for this
+            # command's class and sends the chosen value as `count`.
+            "qty": bool(item.get("qty", False)),
         }
         for item in ir_config
     ]
