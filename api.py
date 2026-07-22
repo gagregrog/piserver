@@ -285,26 +285,33 @@ def volume_startup(background_tasks: BackgroundTasks):
 
 
 @router.post("/stereo/off", status_code=202)
-def stereo_off(background_tasks: BackgroundTasks):
-    """Floor the volume, then power the receiver off — in that order.
+def stereo_off(background_tasks: BackgroundTasks, input_cmd: str | None = None):
+    """Turn the receiver off: optional input switch, floor, then power off.
 
-    Runs in the background and returns immediately so the controller's stop-hold
-    doesn't block while the volume floors before power-off.
+    Runs the ordered sequence in the background and returns immediately so the
+    controller's stop-hold doesn't block. `input_cmd` is an optional `ir[]`
+    command to switch to first (e.g. `?input_cmd=tv`).
     """
-    logger.info("Stereo off requested (floor, then power off)")
-    background_tasks.add_task(ir_blaster.shutdown_stereo)
+    logger.info("Stereo off requested (input=%s, floor, then power off)", input_cmd)
+    background_tasks.add_task(ir_blaster.shutdown_stereo, input_cmd)
     return {"status": "powering off"}
 
 
-@router.post("/ir/{function}")
-def send_ir(function: str, count: int = 1):
+@router.post("/ir/{function}", status_code=202)
+def send_ir(function: str, background_tasks: BackgroundTasks, count: int = 1):
+    """Send a named IR command `count` times.
+
+    Validates the command synchronously (404 if unknown), then sends in the
+    background so the request returns immediately — a large `count` is several
+    seconds of spaced presses and the client shouldn't hold the connection.
+    """
     ir_config = config.load().get("ir", [])
     if not any(item.get("name") == function for item in ir_config):
         raise HTTPException(status_code=404, detail=f"IR function {function!r} not found")
     if count < 1:
         count = 1
     logger.info(f"IR command: {function} x{count}")
-    ir_blaster.send_command(function, count=count)
+    background_tasks.add_task(ir_blaster.send_command, function, count=count)
     return {"sent": function, "count": count}
 
 

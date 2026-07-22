@@ -198,7 +198,7 @@ Use a Flipper Zero: point your Sony remote at it and capture the button press. I
 
 Per-command fields:
 
-- **`name`** — unique identifier for this command, used in the `POST /ir/{name}` API. The endpoint accepts an optional `count` query param (e.g. `POST /ir/volumeUp?count=3`) to send the command as that many discrete presses in a single request — each press is a full `repeat`-frame burst separated by `delay`. Defaults to `1`.
+- **`name`** — unique identifier for this command, used in the `POST /ir/{name}` API. The endpoint accepts an optional `count` query param (e.g. `POST /ir/volumeUp?count=3`) to send the command as that many discrete presses in a single request — each press is a full `repeat`-frame burst separated by `delay`. Defaults to `1`. The command is validated synchronously (404 if unknown) then sent in the background: the request returns `202` immediately so the client never holds the connection open for the burst (a large `count` runs several seconds).
 - **`class`** — display group shown in the web UI (e.g. `"system"`, `"input"`).
 - **`label`** — human-friendly button text shown in the web UI (e.g. `"Apple TV"`). Optional; falls back to `name` when omitted. Returned by `GET /ir` alongside `name` and `class`.
 - **`qty`** — set to `true` to let the web UI drive this command with its class's shared increment stepper (used for `volumeUp`/`volumeDown`). Tapping the button sends the stepper's value as `count`. Optional; defaults to `false`, meaning a single press. Returned by `GET /ir`.
@@ -225,7 +225,7 @@ The receiver exposes only *relative* volume (up/down), so there's no way to comm
 ```
 
 - **`up`** / **`down`** — the `ir[]` command `name`s for volume up/down. Required.
-- **`floor_presses`** — down-presses used to reach zero (the "floor" action). Set this at or above your receiver's maximum volume so the floor is guaranteed regardless of where it started. Defaults to `50`.
+- **`floor_presses`** — down-presses used to reach zero (the "floor" action). Set this at or above your receiver's maximum volume so the floor is guaranteed regardless of where it started. Defaults to `30`.
 - **`startup_presses`** — up-presses sent after flooring on a cold start; since it starts from zero, this is also the resulting volume level. Defaults to `15`.
 
 Both actions send discrete presses via the same `count` mechanism as the web UI's volume stepper: each press is a SIRC burst spaced by the command's own `delay`. That spacing is what makes every press register — which is why bumping a command's `repeat` count doesn't work (`repeat` frames read as a single held button). If the receiver ever drops presses at high counts, raise the volume command's `delay` in `ir[]`.
@@ -237,11 +237,11 @@ Both compound actions are also available on demand, and both appear in the web U
 - `POST /volume/floor` — floor the volume to zero (the **Floor** button).
 - `POST /volume/startup` — drive to the target level: floor, then step up to `startup_presses` (the **Target** button). Gives a deterministic absolute volume from any starting point.
 
-Each sends dozens of spaced IR presses (several seconds), so both **return `202` immediately and run the presses in a background task** — clients don't hold the connection open for the burst. Sends are serialized with a lock, so overlapping requests queue rather than interleave on the single blaster.
+Like every IR-sending endpoint (including `POST /ir/{name}`), both **return `202` immediately and run the presses in a background task** — clients don't hold the connection open for the burst. Sends are serialized with a lock, so overlapping requests queue rather than interleave on the single blaster.
 
 A related shutdown macro pairs with the controller's stop-hold:
 
-- `POST /stereo/off` — floor the volume, **then** power the receiver off (in that order), in the background. Sequencing this server-side is why the controller can fire it and return immediately without the volume-down and power-off racing.
+- `POST /stereo/off` — optionally switch input, floor the volume, **then** power the receiver off — in that order, in the background. Pass `?input_cmd=<name>` to switch to an `ir[]` command (e.g. `tv`) before flooring; omit to skip the input switch. Bundling the ordered sequence server-side is what lets the controller fire one request and return immediately without the input switch, volume-down, and power-off racing each other (which they would if sent as separate async IR requests).
 
 ### Testing
 

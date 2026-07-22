@@ -138,7 +138,7 @@ def floor_volume() -> bool:
     if not down:
         logger.warning("ir_blaster: volume block missing 'down' — cannot floor volume")
         return False
-    floor = vol.get("floor_presses", 50)
+    floor = vol.get("floor_presses", 30)
     logger.info("ir_blaster: floor volume — %dx %s", floor, down)
     with _ir_lock:
         send_command(down, count=floor)
@@ -170,13 +170,19 @@ def apply_startup_volume() -> bool:
     return True
 
 
-def shutdown_stereo() -> None:
-    """Floor the volume, then power the receiver off — in that order.
+def shutdown_stereo(input_cmd: str | None = None) -> None:
+    """Turn the receiver off: optionally switch input, floor the volume, then
+    power off — in that order.
 
     Run as a background task so the caller (e.g. the controller's stop-hold)
-    returns immediately while the receiver comes down quietly before power-off.
+    returns immediately. Bundling the ordered sequence here (rather than firing
+    separate async IR requests) is what guarantees the input switch and volume
+    floor both land before power-off. `input_cmd` is the `ir[]` command name to
+    switch to first (e.g. "tv"); omit to skip the input switch.
     """
     with _ir_lock:
+        if input_cmd:
+            send_command(input_cmd)
         floor_volume()
         logger.info("ir_blaster: powering off receiver")
         send_command("power")
